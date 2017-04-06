@@ -1,5 +1,6 @@
 package smash.app.tweets.importer;
 
+import com.google.gson.JsonObject;
 import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.neural.rnn.RNNCoreAnnotations;
@@ -11,11 +12,10 @@ import edu.stanford.nlp.util.CoreMap;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.json.JSONObject;
 import org.kohsuke.args4j.CmdLineException;
 import org.opengis.feature.simple.SimpleFeature;
-import smash.data.tweets.Tweet;
-import smash.data.tweets.TweetsFeatureFactory;
+import smash.data.tweets.pojo.Tweet;
+import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
 import smash.utils.spark.FeatureRDDToGeoMesa;
@@ -83,7 +83,7 @@ public class TweetsImporter {
       JavaRDD<SimpleFeature> parsedTweets = rawTweets.flatMap(inLine -> {
         ArrayList<SimpleFeature> tweets = new ArrayList<>();
         try {
-          Tweet tweet = Tweet.fromJSON(new JSONObject(inLine));
+          Tweet tweet = Tweet.fromJSON(inLine);
           tweet = processTweet(tweet);
           tweets.add(TweetsFeatureFactory.createFeature(tweet));
         } catch (Exception e) {

@@ -1,12 +1,16 @@
-package smash.data.tweets;
+package smash.data.tweets.gt;
 
 import com.google.common.base.Joiner;
+import com.google.gson.Gson;
 import com.vividsolutions.jts.geom.*;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
-import org.json.JSONArray;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
 import org.locationtech.geomesa.utils.interop.SimpleFeatureTypes;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
+import smash.data.tweets.pojo.Tweet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +21,7 @@ import java.util.List;
 
 public class TweetsFeatureFactory {
   public static final String FT_NAME = "Tweet";
-
+  // Attributes fields
   public static final String GEOMETRY = "geometry";
   public static final String ID_STR = "id_str";
   public static final String CREATED_AT = "created_at";
@@ -26,11 +30,10 @@ public class TweetsFeatureFactory {
   public static final String TOKENS = "tokens";
   public static final String SENTIMENT = "sentiment";
 
-  public static SimpleFeatureType SFT;
-
-  static{
-    TweetsFeatureFactory.SFT = createFeatureType();
-  }
+  public static final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
+  public static final DateTimeFormatter DTformatter =
+    DateTimeFormat.forPattern(timeFormat);
+  public static SimpleFeatureType SFT = createFeatureType();
 
   public static SimpleFeatureType createFeatureType() {
     List<String> attributes = new ArrayList<>();
@@ -57,29 +60,21 @@ public class TweetsFeatureFactory {
     GeometryFactory geometryFactory =
       new GeometryFactory(new PrecisionModel(), 4326);
     // lon-lat order
-    Coordinate coordinate =
-      new Coordinate(tweet.getLongitude(), tweet.getLatitude());
+    Double lon = tweet.getCoordinates().getLon().doubleValue();
+    Double lat = tweet.getCoordinates().getLat().doubleValue();
+    Coordinate coordinate = new Coordinate(lon, lat);
     Point point = geometryFactory.createPoint(coordinate);
+    DateTime createdAt = DateTime.parse(tweet.getCreated_at(), DTformatter);
+    String tokenStr = Tweet.gson.toJson(tweet.getTokens());
+
     feature.setDefaultGeometry(point);
     feature.setAttribute(ID_STR, tweet.getId_str());
-    feature.setAttribute(CREATED_AT, tweet.getCreated_at());
+    feature.setAttribute(CREATED_AT, createdAt);
     feature.setAttribute(TEXT, tweet.getText());
     feature.setAttribute(SCREEN_NAME, tweet.getUser().getScreen_name());
-    String tokenStr = new JSONArray(tweet.getTokens().toArray()).toString();
     feature.setAttribute(TOKENS, tokenStr);
     feature.setAttribute(SENTIMENT, tweet.getSentiment());
 
     return feature;
   }
-
-//  public static void main(String[] args) {
-//    double lon = 147.832031;
-//    double lat = -38.899583;
-//    GeometryFactory geometryFactory =
-//      new GeometryFactory(new PrecisionModel(), 4326);
-//    Coordinate coordinate = new Coordinate(lon, lat);
-//    Point point = geometryFactory.createPoint(coordinate);
-//    System.out.println(point.toText());
-//    System.out.println(point.getSRID());
-//  }
 }
