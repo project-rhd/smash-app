@@ -1,12 +1,12 @@
 package smash.data.tweets;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.opengis.feature.simple.SimpleFeature;
+
 
 import java.io.Serializable;
 import java.text.ParseException;
@@ -30,55 +30,57 @@ public class Tweet implements Serializable{
   private List<String> tokens;
   private Integer sentiment;
 
-  public static Tweet fromJSON(JSONObject j) throws JSONException, ParseException {
+  public static Tweet fromJSON(JsonObject j) throws ParseException {
     String id, text;
     Double lat, lon;
     DateTime time;
     TwitterUser user;
-    JSONObject geo = j.has("geo") ? j.getJSONObject("geo") : null;
-    JSONArray coordinates = geo != null && geo.has("coordinates") ?
-      geo.getJSONArray("coordinates") : null;
-    String timeStr = j.has("created_at") ? j.getString("created_at") : null;
+    JsonObject geo = j.has("geo") ? j.getAsJsonObject("geo") : null;
+    JsonArray coordinates = geo != null && geo.has("coordinates") ?
+      geo.getAsJsonArray("coordinates") : null;
+    String timeStr = j.has("created_at") ?
+      j.get("created_at").getAsString() : null;
     final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
     DateTimeFormatter formatter = DateTimeFormat.forPattern(timeFormat);
 
-    id = j.has("id_str") ? j.getString("id_str") : j.getString("id");
-    text = j.has("text") ? j.getString("text") : null;
-    user = j.has("user") ? TwitterUser.fromJSON(j.getJSONObject("user")) : null;
-    lat = coordinates != null ? coordinates.getDouble(0) : null;
-    lon = coordinates != null ? coordinates.getDouble(1) : null;
+    id = j.has("id_str") ?
+      j.get("id_str").getAsString() : j.get("id").getAsString();
+    text = j.has("text") ? j.get("text").getAsString() : null;
+    user = j.has("user") ? TwitterUser.fromJSON(j.getAsJsonObject("user")) : null;
+    lat = coordinates != null ? coordinates.get(0).getAsDouble() : null;
+    lon = coordinates != null ? coordinates.get(1).getAsDouble() : null;
     time = timeStr != null ? DateTime.parse(timeStr, formatter) : null;
 
     Tweet t = new Tweet(id, text, lat, lon, time, user);
 
     if (j.has("tokens")){
-      JSONArray tweetTokens = j.getJSONArray("tokens");
-      List<String> tokens = new ArrayList<String>(tweetTokens.length());
-      for (int i = 0; i < tweetTokens.length(); i++)
-        tokens.add(tweetTokens.getString(i));
+      JsonArray tweetTokens = j.getAsJsonArray("tokens");
+      List<String> tokens = new ArrayList<String>(tweetTokens.size());
+      for (int i = 0; i < tweetTokens.size(); i++)
+        tokens.add(tweetTokens.get(i).getAsString());
       t.setTokens(tokens);
     }
     if (j.has("sentiment")){
-      t.setSentiment(j.getInt("sentiment"));
+      t.setSentiment(j.get("sentiment").getAsInt());
     }
     return t;
   }
 
-  public JSONObject toJSON() {
-    JSONObject json = new JSONObject();
-    JSONArray coordinates = new JSONArray();
-    JSONArray tokens = new JSONArray();
-    coordinates.put(this.latitude);
-    coordinates.put(this.longitude);
-    this.tokens.forEach(tokens::put);
-    json.put("id", this.id_str);
-    json.put("id_str", this.id_str);
-    json.put("text", this.text);
-    json.put("created_at",this.created_at.toString());
-    json.put("geo", coordinates);
-    json.put("user", user.toJSON());
-    json.put("tokens", tokens);
-    json.put("sentiment", sentiment);
+  public JsonObject toJSON() {
+    JsonObject json = new JsonObject();
+    JsonArray coordinates = new JsonArray();
+    JsonArray tokens = new JsonArray();
+    coordinates.add(new JsonPrimitive(this.latitude));
+    coordinates.add(new JsonPrimitive(this.longitude));
+    this.tokens.forEach(token-> tokens.add(new JsonPrimitive(token)));
+    json.add("id", new JsonPrimitive(this.id_str));
+    json.add("id_str", new JsonPrimitive(this.id_str));
+    json.add("text", new JsonPrimitive(this.text));
+    json.add("created_at",new JsonPrimitive(this.created_at.toString()));
+    json.add("geo", coordinates);
+    json.add("user", user.toJSON());
+    json.add("tokens", tokens);
+    json.add("sentiment", new JsonPrimitive(sentiment));
     return json;
   }
 

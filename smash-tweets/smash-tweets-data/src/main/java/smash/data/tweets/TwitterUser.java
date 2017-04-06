@@ -1,7 +1,8 @@
 package smash.data.tweets;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+
 
 import java.io.Serializable;
 
@@ -13,14 +14,15 @@ import java.io.Serializable;
 public class TwitterUser implements Serializable {
   private String screen_name;
 
-  public static TwitterUser fromJSON (JSONObject j) throws JSONException {
-    String name = j.has("screen_name") ? j.getString("screen_name") : null;
+  public static TwitterUser fromJSON (JsonObject j)   {
+    String name = j.has("screen_name") ?
+      j.get("screen_name").getAsString() : null;
     return new TwitterUser(name);
   }
 
-  public JSONObject toJSON(){
-    JSONObject json = new JSONObject();
-    json.put("screen_name", screen_name);
+  public JsonObject toJSON(){
+    JsonObject json = new JsonObject();
+    json.add("screen_name", new JsonPrimitive(screen_name));
     return json;
   }
 
