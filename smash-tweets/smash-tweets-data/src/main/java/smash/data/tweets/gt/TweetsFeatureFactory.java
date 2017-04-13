@@ -1,18 +1,19 @@
 package smash.data.tweets.gt;
 
 import com.google.common.base.Joiner;
-import com.google.gson.Gson;
 import com.vividsolutions.jts.geom.*;
+import org.geotools.factory.Hints;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 import org.locationtech.geomesa.utils.interop.SimpleFeatureTypes;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import smash.data.tweets.pojo.Tweet;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -31,8 +32,7 @@ public class TweetsFeatureFactory {
   public static final String SENTIMENT = "sentiment";
 
   public static final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
-  public static final DateTimeFormatter DTformatter =
-    DateTimeFormat.forPattern(timeFormat);
+
   public static SimpleFeatureType SFT = createFeatureType();
 
   public static SimpleFeatureType createFeatureType() {
@@ -53,10 +53,11 @@ public class TweetsFeatureFactory {
     return simpleFeatureType;
   }
 
-  public static SimpleFeature createFeature(Tweet tweet) {
+  public static SimpleFeature createFeature(Tweet tweet) throws ParseException {
     SimpleFeatureBuilder builder = new SimpleFeatureBuilder(SFT);
     SimpleFeature feature = builder.buildFeature("tweet-" + tweet.getId_str());
-
+    // Tell GeoMesa to use user provided FID
+    feature.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
     GeometryFactory geometryFactory =
       new GeometryFactory(new PrecisionModel(), 4326);
     // lon-lat order
@@ -64,12 +65,14 @@ public class TweetsFeatureFactory {
     Double lat = tweet.getCoordinates().getLat().doubleValue();
     Coordinate coordinate = new Coordinate(lon, lat);
     Point point = geometryFactory.createPoint(coordinate);
-    DateTime createdAt = DateTime.parse(tweet.getCreated_at(), DTformatter);
+    // Note: SimpleDateFormat is not thread-safe
+    DateFormat df = new SimpleDateFormat(timeFormat);
+    Date created_at = df.parse(tweet.getCreated_at());
     String tokenStr = Tweet.gson.toJson(tweet.getTokens());
 
     feature.setDefaultGeometry(point);
     feature.setAttribute(ID_STR, tweet.getId_str());
-    feature.setAttribute(CREATED_AT, createdAt);
+    feature.setAttribute(CREATED_AT, created_at);
     feature.setAttribute(TEXT, tweet.getText());
     feature.setAttribute(SCREEN_NAME, tweet.getUser().getScreen_name());
     feature.setAttribute(TOKENS, tokenStr);

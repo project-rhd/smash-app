@@ -18,7 +18,7 @@ import java.util.List;
  */
 
 public class FeatureWriterOnSpark {
-  private static Logger logger = LoggerFactory.getLogger(FeatureWriterOnSpark.class);
+  private static final Logger logger = LoggerFactory.getLogger(FeatureWriterOnSpark.class);
   private static GeoMesaFeatureStore geoMesaFeatureStore = null;
   private static GeoMesaFeatureWriter geoMesaFeatureWriter = null;
 
@@ -38,6 +38,7 @@ public class FeatureWriterOnSpark {
         (GeoMesaFeatureStore) dataStore.getFeatureSource(typeName);
     }
     if (geoMesaFeatureWriter == null) {
+      System.out.println("Init geoMesaFeatureWriter");
       logger.info("Init geoMesaFeatureWriter");
       geoMesaFeatureWriter = ((GeoMesaDataStore) geoMesaFeatureStore
         .getDataStore()).getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT);
@@ -50,12 +51,15 @@ public class FeatureWriterOnSpark {
    * @param simpleFeature
    * @throws IOException
    */
-  public static void write(SimpleFeature simpleFeature) throws IOException {
+  public static boolean write(SimpleFeature simpleFeature) throws IOException {
     try {
       geoMesaFeatureWriter.writeFeature(simpleFeature);
     } catch (Exception e) {
+      logger.warn("Failed to save tweets: ");
       e.printStackTrace();
+      return false;
     }
+    return true;
   }
 
   /**
@@ -83,11 +87,13 @@ public class FeatureWriterOnSpark {
    * Flush Data then Close FeatureWriter and FeatureStore
    */
   public static void close() {
-    if (geoMesaFeatureWriter != null) {
-      geoMesaFeatureWriter.close();
-      geoMesaFeatureWriter = null;
-      geoMesaFeatureStore = null;
-      logger.info("geoMesaFeatureWriter closed");
+    synchronized (logger){
+      if (geoMesaFeatureWriter != null) {
+        geoMesaFeatureWriter.close();
+        geoMesaFeatureWriter = null;
+        geoMesaFeatureStore = null;
+        logger.info("geoMesaFeatureWriter closed");
+      }
     }
   }
 
@@ -95,7 +101,8 @@ public class FeatureWriterOnSpark {
    * Reset all static variables in class
    */
   public static void reset() {
-    close();
+    geoMesaFeatureWriter = null;
+    geoMesaFeatureStore = null;
   }
 }
 

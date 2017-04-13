@@ -23,6 +23,13 @@ public class TweetTest extends TestCase {
     "\"screen_name\":\"khangiie\"}," +
     "\"lang\":\"en\"}";
 
+  public static String parsedTweetStr = "{\"id_str\":\"508093847138619392\"," +
+    "\"text\":\"Beautiful day :)\",\"coordinates\":{\"type\":\"Point\"," +
+    "\"coordinates\":[144.97145176999998739,-37.807908040000000938]},\"" +
+    "created_at\":\"Sat Sep 06 03:26:27 +0000 2014\",\"user\":{\"screen_name" +
+    "\":\"khangiie\"},\"lang\":\"en\",\"tokens\":[\"beautiful\",\"day\"]," +
+    "\"sentiment\":1}";
+
   public static Tweet createDummyTweet() {
     Tweet t = new Tweet();
     t.setId_str("508093847138619392");
@@ -65,6 +72,7 @@ public class TweetTest extends TestCase {
       System.out.println(f.getType().getSimpleName() + " + " + f.getName());
     }
   }
+
 
 
 }

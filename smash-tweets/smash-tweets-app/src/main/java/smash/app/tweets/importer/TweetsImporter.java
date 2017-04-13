@@ -1,6 +1,5 @@
 package smash.app.tweets.importer;
 
-import com.google.gson.JsonObject;
 import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.neural.rnn.RNNCoreAnnotations;
@@ -9,13 +8,20 @@ import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.sentiment.SentimentCoreAnnotations;
 import edu.stanford.nlp.trees.Tree;
 import edu.stanford.nlp.util.CoreMap;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 import org.kohsuke.args4j.CmdLineException;
 import org.opengis.feature.simple.SimpleFeature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import smash.data.tweets.pojo.Tweet;
 import smash.data.tweets.gt.TweetsFeatureFactory;
+import smash.utils.geomesa.FeatureWriterOnSpark;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
 import smash.utils.spark.FeatureRDDToGeoMesa;
@@ -28,24 +34,20 @@ import java.util.*;
  */
 
 public class TweetsImporter {
+  private static Logger logger = LoggerFactory.getLogger(FeatureWriterOnSpark.class);
 
   // Stanford NLP properties
   private static Properties props = new Properties();
   private static List<String> keepPOS = new ArrayList<>();
   private static StanfordCoreNLP pipeline;
 
-  // Initiate NLP on each spark worker in class loader
+  // Initiate properties required by NLP core
   static {
     props.setProperty("annotators",
       "tokenize, ssplit, pos, lemma, parse, sentiment");
     props.setProperty("tokenize.whitespace", "false");
+    props.setProperty("tokenize.options", "untokenizable=noneKeep");
     props.setProperty("ssplit.tokenPatternsToDiscard", "allDelete");
-    pipeline = new StanfordCoreNLP(TweetsImporter.props);
-    /**
-     * These are the Part of Speech to retain for topic modelling
-     *
-     * @see https://catalog.ldc.upenn.edu/docs/LDC95T7/cl93.html
-     * */
     keepPOS.addAll(Arrays.asList(new String[]{"FW", "JJ", "JJR", "JJS", "NN",
       "NNS", "NNP", "NNPS", "RB", "RP", "VB", "VBD", "VBG", "VBN", "VBP",
       "VBZ", "WRB"}));
@@ -54,7 +56,7 @@ public class TweetsImporter {
   public static void main(String[] args)
     throws IllegalAccessException, CmdLineException, NoSuchFieldException {
     TweetsImporterOptions options = new TweetsImporterOptions();
-//    options.parse(args);
+    options.parse(args);
     TweetsImporter importer = new TweetsImporter();
     JobTimer.print(() -> {
       importer.run(options);
@@ -68,6 +70,7 @@ public class TweetsImporter {
   public TweetsImporter(SparkConf sparkConf) {
     this.sparkConf = sparkConf;
     sparkConf.setAppName(this.getClass().getSimpleName());
+    sparkConf.set("spark.files.maxPartitionBytes", "33554432"); // 32MB
   }
 
   public TweetsImporter() {
@@ -79,25 +82,41 @@ public class TweetsImporter {
     GeoMesaDataUtils.saveFeatureType(options, TweetsFeatureFactory.SFT);
     // Launch Spark Context
     try (JavaSparkContext sc = new JavaSparkContext(sparkConf)) {
-      JavaRDD<String> rawTweets = sc.textFile(options.inputFile, 100);
-      JavaRDD<SimpleFeature> parsedTweets = rawTweets.flatMap(inLine -> {
-        ArrayList<SimpleFeature> tweets = new ArrayList<>();
+      // Parse tweets json file to json string rdd
+      SparkSession sparkSession = new SparkSession(sc.sc());
+      JavaRDD<String> rawJson = sc.textFile(options.inputFile, 100);
+      Dataset<Row> tweetRaw =
+        sparkSession.read().json(rawJson).select("value.*");
+      JavaRDD<String> tweetStr = tweetRaw.toJSON().toJavaRDD();
+      // Parse tweets json rdd and then map to feature rdd
+      JavaRDD<SimpleFeature> featureRDD = tweetStr.flatMap(json -> {
+        List<SimpleFeature> tweets = new ArrayList<>();
         try {
-          Tweet tweet = Tweet.fromJSON(inLine);
-          tweet = processTweet(tweet);
-          tweets.add(TweetsFeatureFactory.createFeature(tweet));
+          Tweet tweet = Tweet.fromJSON(json);
+          if (tweet.isValid()) {
+            tweet = processTweet(tweet);
+          }
+          if (tweet.isGeoTweet()) {
+            SimpleFeature feature = TweetsFeatureFactory.createFeature(tweet);
+            tweets.add(feature);
+          }
         } catch (Exception e) {
-          System.err.println(e.getMessage());
+          logger.warn(e.getMessage());
         }
         return tweets.iterator();
       });
-      Long nSaved = FeatureRDDToGeoMesa.saveToGeoMesa(options, parsedTweets, sc);
-      System.out.format(">>> Ingested %,8d%n tweets", nSaved);
+      Long numSaved = FeatureRDDToGeoMesa.save(options, featureRDD, sc);
+      System.out.println("Ingested " + numSaved + " tweets");
     }
   }
 
+
   protected static Tweet processTweet(Tweet tweet) throws Exception {
     Annotation document = new Annotation(tweet.getText());
+
+    if (TweetsImporter.pipeline == null) {
+      TweetsImporter.pipeline = new StanfordCoreNLP(TweetsImporter.props);
+    }
     // Runs all Annotators on this text
     TweetsImporter.pipeline.annotate(document);
     List<CoreMap> sentences = document.get(CoreAnnotations.SentencesAnnotation.class);
@@ -126,8 +145,14 @@ public class TweetsImporter {
       }
     }
     // Writes lemmas and sentiment in the output Tweet
-    tweet.setSentiment((int) Sentiment.getSentiment(mainSentiment).getValue());
-    tweet.getTokens().addAll(lemmas);
+    tweet.setSentiment(Sentiment.getSentiment(mainSentiment).getValue());
+    if (tweet.getTokens() != null) {
+      tweet.getTokens().addAll(lemmas);
+    } else {
+      List<String> tokens = new ArrayList<>();
+      tokens.addAll(lemmas);
+      tweet.setTokens(tokens);
+    }
     return tweet;
   }
 }

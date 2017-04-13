@@ -16,21 +16,24 @@ import java.util.List;
 
 public class FeatureRDDToGeoMesa {
 
-  public static long saveToGeoMesa(GeoMesaOptions options,
-                                   JavaRDD<SimpleFeature> featureRDD,
-                                   JavaSparkContext jsc) {
+  public static long save(GeoMesaOptions options,
+                          JavaRDD<SimpleFeature> featureRDD,
+                          JavaSparkContext jsc) {
     JavaRDD<Long> countFeatures = featureRDD.mapPartitions(featureIterator -> {
       long i = 0;
       if (featureIterator.hasNext()) {
         SimpleFeature simpleFeature = featureIterator.next();
         String stfName = simpleFeature.getFeatureType().getTypeName();
         FeatureWriterOnSpark.lazyInit(options, stfName);
-        FeatureWriterOnSpark.write(simpleFeature);
-        i++;
+        boolean saved = FeatureWriterOnSpark.write(simpleFeature);
+        if (saved)
+          i++;
       }
       while (featureIterator.hasNext()) {
-        FeatureWriterOnSpark.write(featureIterator.next());
-        i++;
+        SimpleFeature simpleFeature = featureIterator.next();
+        boolean saved = FeatureWriterOnSpark.write(simpleFeature);
+        if (saved)
+          i++;
       }
       return Arrays.asList(i).iterator();
     });
@@ -47,4 +50,5 @@ public class FeatureRDDToGeoMesa {
       FeatureWriterOnSpark.close();
     });
   }
+
 }

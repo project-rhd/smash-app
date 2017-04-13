@@ -9,7 +9,7 @@ import java.util.List;
  * @author Yikai Gong
  */
 
-public class Tweet implements Serializable{
+public class Tweet implements Serializable {
   // Raw data field
   private String id_str;
   private String text;
@@ -28,7 +28,7 @@ public class Tweet implements Serializable{
     return gson.fromJson(j, Tweet.class);
   }
 
-  public static Tweet fromJSON (String jsonStr) {
+  public static Tweet fromJSON(String jsonStr) {
     return gson.fromJson(jsonStr, Tweet.class);
   }
 
@@ -101,6 +101,20 @@ public class Tweet implements Serializable{
 
   public void setLang(String lang) {
     this.lang = lang;
+  }
+
+  public boolean isGeoTweet() {
+    if (isValid() == false || coordinates == null)
+      return false;
+    else
+      return true;
+  }
+
+  public boolean isValid() {
+    if (id_str == null)
+      return false;
+    else
+      return true;
   }
 
 }

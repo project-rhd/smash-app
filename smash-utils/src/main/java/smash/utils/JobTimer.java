@@ -2,12 +2,19 @@ package smash.utils;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 /**
  * @author Yikai Gong
  */
 
 public class JobTimer {
+  // Using Java Generic for passing method as arguments
+  // java.util.concurrent.Callable can be used for passing no-arg methods.
+  // java.util.function.Function can be used for passing one-arg methods.
+  // The <T,R,G,...> on method signature can be seen as a place holder
+  // for dynamic Types of input-arguments or/and return type.
+  // Ref: https://www.tutorialspoint.com/java/java_generics.htm
   public static <T> T print(Callable<T> task) {
     T call = null;
     try {
@@ -35,6 +42,10 @@ public class JobTimer {
       e.printStackTrace();
     }
     return call;
+  }
+
+  public static <T, R> T doSth(Function<T, R> method) {
+    return null;
   }
 }
 

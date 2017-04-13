@@ -22,7 +22,8 @@ accumulo_user_pwd=smash
 accumulo_table_name=tweets
 
 # Path of raw data file in hdfs. e.g. /scats/sample700M.csv  VolumeData.CSV  volume_1G.csv volume.csv
-INPUT_FILE=/tweets/geoTweets_mel.json
+#INPUT_FILE=/tweets/geoTweets_melb_2017.json
+INPUT_FILE=/tweets/geoTweets_melb_2017.json
 DIRECTORY_FILE=/tweets/dictionary.txt
 
 jar_name=smash-tweets-app-0.1.0.jar
@@ -62,6 +63,9 @@ ${client_spark_home}/bin/spark-submit \
 --deploy-mode cluster \
 --conf "spark.driver.userClassPathFirst=true" \
 --conf "spark.executor.userClassPathFirst=true" \
+--jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
+--conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
+--conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
 --zookeepers ${zookeepers} \
@@ -81,3 +85,7 @@ else
 fi
 
 echo "Task submitted. Check" http://${spark_master_address}:8080 "for details."
+
+#--jars ${hdfs_root}/lib/stanford-corenlp-3.7.0.jar \
+#--conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0.jar" \
+#--conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0.jar" \
