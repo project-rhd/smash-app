@@ -21,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import smash.data.tweets.pojo.Tweet;
 import smash.data.tweets.gt.TweetsFeatureFactory;
-import smash.utils.geomesa.FeatureWriterOnSpark;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
 import smash.utils.spark.FeatureRDDToGeoMesa;
@@ -34,7 +33,7 @@ import java.util.*;
  */
 
 public class TweetsImporter {
-  private static Logger logger = LoggerFactory.getLogger(FeatureWriterOnSpark.class);
+  private static Logger logger = LoggerFactory.getLogger(TweetsImporter.class);
 
   // Stanford NLP properties
   private static Properties props = new Properties();
@@ -48,9 +47,9 @@ public class TweetsImporter {
     props.setProperty("tokenize.whitespace", "false");
     props.setProperty("tokenize.options", "untokenizable=noneKeep");
     props.setProperty("ssplit.tokenPatternsToDiscard", "allDelete");
-    keepPOS.addAll(Arrays.asList(new String[]{"FW", "JJ", "JJR", "JJS", "NN",
+    keepPOS.addAll(Arrays.asList("FW", "JJ", "JJR", "JJS", "NN",
       "NNS", "NNP", "NNPS", "RB", "RP", "VB", "VBD", "VBG", "VBN", "VBP",
-      "VBZ", "WRB"}));
+      "VBZ", "WRB"));
   }
 
   public static void main(String[] args)
@@ -67,17 +66,17 @@ public class TweetsImporter {
 
   private SparkConf sparkConf;
 
-  public TweetsImporter(SparkConf sparkConf) {
+  private TweetsImporter(SparkConf sparkConf) {
     this.sparkConf = sparkConf;
     sparkConf.setAppName(this.getClass().getSimpleName());
     sparkConf.set("spark.files.maxPartitionBytes", "33554432"); // 32MB
   }
 
-  public TweetsImporter() {
+  private TweetsImporter() {
     this(new SparkConf());
   }
 
-  public void run(TweetsImporterOptions options) throws IOException {
+  private void run(TweetsImporterOptions options) throws IOException {
     // Ensures Feature Type is saved in GeoMesa
     GeoMesaDataUtils.saveFeatureType(options, TweetsFeatureFactory.SFT);
     // Launch Spark Context
@@ -85,8 +84,9 @@ public class TweetsImporter {
       // Parse tweets json file to json string rdd
       SparkSession sparkSession = new SparkSession(sc.sc());
       JavaRDD<String> rawJson = sc.textFile(options.inputFile, 100);
-      Dataset<Row> tweetRaw =
-        sparkSession.read().json(rawJson).select("value.*");
+      Dataset<Row> tweetRaw;
+      tweetRaw = sparkSession.read().json(rawJson).selectExpr("value.*");
+//      tweetRaw.show();
       JavaRDD<String> tweetStr = tweetRaw.toJSON().toJavaRDD();
       // Parse tweets json rdd and then map to feature rdd
       JavaRDD<SimpleFeature> featureRDD = tweetStr.flatMap(json -> {

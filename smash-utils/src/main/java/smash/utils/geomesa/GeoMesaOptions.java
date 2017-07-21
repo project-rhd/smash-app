@@ -13,7 +13,7 @@ import java.util.Map;
  * @author Yikai Gong
  */
 
-public class GeoMesaOptions implements Serializable{
+public class GeoMesaOptions implements Serializable {
 
   // Options definitions
   @Option(name = "--instanceId", required = true, usage = "the ID (name) of the Accumulo instance, e.g:  mycloud")
@@ -51,14 +51,23 @@ public class GeoMesaOptions implements Serializable{
   }
 
   public Map<String, String> getAccumuloOptions() {
-    Map<String, String> values = new HashMap<String, String>();
+    Map<String, String> values = new HashMap<>();
     values.put("instanceId", this.instanceId);
     values.put("zookeepers", this.zookeepers);
     values.put("user", this.user);
     values.put("password", this.password);
-    values.put("auths", this.auths);
     values.put("tableName", this.tableName);
+    if (this.auths != null)
+      values.put("auths", this.auths);
     values.put("generateStats", Boolean.FALSE.toString());
     return values;
   }
+
+  public Map<String, Serializable> getAccumuloOptions2() {
+    Map<String, String> values = getAccumuloOptions();
+    Map<String, Serializable> results = new HashMap<>();
+    values.forEach(results::put);
+    return results;
+  }
+
 }

@@ -22,8 +22,6 @@ accumulo_user_pwd=smash
 accumulo_table_name=tweets
 
 # Path of raw data file in hdfs. e.g. /scats/sample700M.csv  VolumeData.CSV  volume_1G.csv volume.csv
-INPUT_FILE=/tweets/geoTweets_melb_2017.json
-DIRECTORY_FILE=/tweets/dictionary.txt
 
 jar_name=smash-tweets-app-0.1.0.jar
 
@@ -57,21 +55,17 @@ ${client_spark_home}/bin/spark-submit \
 --verbose \
 --deploy-mode cluster \
 --master spark://${spark_master_address}:6066 \
---driver-memory 3G \
+--driver-memory 4G \
 --executor-memory 4G \
---class "smash.app.tweets.importer.TweetsImporter" \
---jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
---conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
---conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
+--conf spark.eventLog.enabled=true \
+--class "smash.app.tweets.cluster.TweetsCluster" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
 --zookeepers ${zookeepers} \
 --user ${accumulo_user_name} \
 --password ${accumulo_user_pwd} \
 --tableName ${accumulo_table_name} \
---overwrite \
---inputFile ${input_file_url} \
---dictionaryFile  ${directory_file_url}
+--overwrite
 
 
 if [ $? -eq 0 ]; then
@@ -82,8 +76,3 @@ else
 fi
 
 echo "Task submitted. Check" http://${spark_master_address}:8080 "for details."
-
-
-
-#--conf "spark.driver.userClassPathFirst=true" \
-#--conf "spark.executor.userClassPathFirst=true" \

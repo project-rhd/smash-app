@@ -4,11 +4,13 @@ import com.google.common.base.Joiner;
 import com.vividsolutions.jts.geom.*;
 import org.geotools.factory.Hints;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
+import org.geotools.geojson.feature.FeatureJSON;
 import org.locationtech.geomesa.utils.interop.SimpleFeatureTypes;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import smash.data.tweets.pojo.Tweet;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
