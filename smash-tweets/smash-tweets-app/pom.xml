@@ -80,6 +80,17 @@
                 <transformer
                   implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
               </transformers>
+              <artifactSet>
+                <excludes>
+                  <exclude>org.slf4j:*</exclude>
+                  <exclude>org.geotools:gt-render:*</exclude>
+                  <exclude>org.geotools:gt-coverage:*</exclude>
+                  <exclude>it.geosolutions.jaiext.*</exclude>
+                  <exclude>com.esotericsoftware.kryo:*</exclude>
+                  <exclude>org.ow2.asm:*</exclude>
+                  <exclude>org.scala-lang:*</exclude>
+                </excludes>
+              </artifactSet>
               <!-- Remove signature files-->
               <filters>
                 <filter>
@@ -89,9 +100,28 @@
                     <exclude>META-INF/*.SF</exclude>
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
+                    <exclude>org/objectweb/asm/**</exclude>
                   </excludes>
                 </filter>
               </filters>
+              <relocations>
+                <relocation>
+                  <pattern>com.clearspring.analytics</pattern>
+                  <shadedPattern>org.locationtech.geomesa.shaded.com.clearspring.analytics</shadedPattern>
+                </relocation>
+                <!--<relocation>-->
+                  <!--<pattern>com.google.common</pattern>-->
+                  <!--<shadedPattern>org.locationtech.geomesa.shaded.com.google.common</shadedPattern>-->
+                <!--</relocation>-->
+                <!--<relocation>-->
+                  <!--<pattern>org.apache.commons.codec</pattern>-->
+                  <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.commons.codec</shadedPattern>-->
+                <!--</relocation>-->
+                <!--<relocation>-->
+                  <!--<pattern>org.apache.thrift</pattern>-->
+                  <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.thrift</shadedPattern>-->
+                <!--</relocation>-->
+              </relocations>
             </configuration>
           </execution>
         </executions>

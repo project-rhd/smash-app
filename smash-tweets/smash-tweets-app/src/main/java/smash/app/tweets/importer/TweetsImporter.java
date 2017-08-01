@@ -16,6 +16,10 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.kohsuke.args4j.CmdLineException;
+import org.locationtech.geomesa.spark.GeoMesaSpark;
+import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
+import org.locationtech.geomesa.spark.SpatialRDDProvider;
+import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
 import org.opengis.feature.simple.SimpleFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +74,9 @@ public class TweetsImporter {
     this.sparkConf = sparkConf;
     sparkConf.setAppName(this.getClass().getSimpleName());
     sparkConf.set("spark.files.maxPartitionBytes", "33554432"); // 32MB
+    sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
+    sparkConf.set("spark.kryo.registrator", GeoMesaSparkKryoRegistrator.class.getName());
+
   }
 
   private TweetsImporter() {
@@ -80,12 +87,12 @@ public class TweetsImporter {
     // Ensures Feature Type is saved in GeoMesa
     GeoMesaDataUtils.saveFeatureType(options, TweetsFeatureFactory.SFT);
     // Launch Spark Context
-    try (JavaSparkContext sc = new JavaSparkContext(sparkConf)) {
+    try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
+      JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
       // Parse tweets json file to json string rdd
-      SparkSession sparkSession = new SparkSession(sc.sc());
-      JavaRDD<String> rawJson = sc.textFile(options.inputFile, 100);
+      JavaRDD<String> rawJson = sc.textFile(options.inputFile, 40);
       Dataset<Row> tweetRaw;
-      tweetRaw = sparkSession.read().json(rawJson).selectExpr("value.*");
+      tweetRaw = ss.read().json(rawJson).selectExpr("value.*");
 //      tweetRaw.show();
       JavaRDD<String> tweetStr = tweetRaw.toJSON().toJavaRDD();
       // Parse tweets json rdd and then map to feature rdd
@@ -105,7 +112,12 @@ public class TweetsImporter {
         }
         return tweets.iterator();
       });
-      Long numSaved = FeatureRDDToGeoMesa.save(options, featureRDD, sc);
+      SpatialRDDProvider sp = GeoMesaSpark.apply(options.getAccumuloOptions2());
+      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
+      jsp.save(featureRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);
+//      Long numSaved = FeatureRDDToGeoMesa.save(options, featureRDD, sc);
+
+      Long numSaved = featureRDD.count();
       System.out.println("Ingested " + numSaved + " tweets");
     }
   }

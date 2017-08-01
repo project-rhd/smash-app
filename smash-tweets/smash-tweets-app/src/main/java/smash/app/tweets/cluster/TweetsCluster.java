@@ -12,6 +12,8 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
 import org.geotools.data.Query;
+import org.geotools.factory.Hints;
+import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSpark;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
@@ -22,11 +24,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
+import scala.collection.JavaConverters;
 import smash.data.tweets.gt.TweetsFeatureFactory;
+import smash.data.tweets.pojo.Tweet;
 import smash.utils.JobTimer;
+import smash.utils.geomesa.GeoMesaDataUtils;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Yikai Gong
@@ -68,7 +76,7 @@ public class TweetsCluster implements Serializable {
 //    sparkConf.set("spark.sql.crossJoin.enabled","true");
   }
 
-  private void run(TweetsClusterOptions options) {
+  private void run(TweetsClusterOptions options) throws IOException {
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
       SpatialRDDProvider sp = GeoMesaSpark.apply(options.getAccumuloOptions2());
@@ -76,11 +84,17 @@ public class TweetsCluster implements Serializable {
       Query query = new Query(TweetsFeatureFactory.FT_NAME);
       JavaRDD<SimpleFeature> tweetsRDD = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
-      int numOfExecutors = sc.sc().getExecutorIds().size() - 1;
+      ReferencedEnvelope envelope = GeoMesaDataUtils.getBoundingBox(options, query);
+      int numOfExecutors = sc.sc().getExecutorIds().size();
       System.out.println("Num of Partition: " + tweetsRDD.getNumPartitions());
       System.out.println("Number of executors: " + numOfExecutors);
       tweetsRDD = tweetsRDD.repartition(numOfExecutors * 2);
       System.out.println("Num of Partition (After Repartition): " + tweetsRDD.getNumPartitions());
+      Map<String, Object> envMap = new HashMap<>();
+      envMap.put("minX", envelope.getMinX());
+      envMap.put("minY", envelope.getMinY());
+      envMap.put("maxX", envelope.getMaxX());
+      envMap.put("maxY", envelope.getMaxY());
 
       JavaPairRDD<STObject, SimpleFeature> pairRDD = tweetsRDD.mapToPair(sf -> {
         Geometry geom = (Geometry) sf.getDefaultGeometry();
@@ -98,29 +112,43 @@ public class TweetsCluster implements Serializable {
       double epsilon = calculate_epsilon(range, duration, kms_per_radian_mel);
       double speed = calculate_speed(range, duration, kms_per_radian_mel);
       double qGridCellSize = calculate_epsilon(0.5, 0, kms_per_radian_mel) * 2;   //0.5
-      int maxPointsPerCell = 500;
+      int maxPointsPerCell = 100;
       System.out.println("Range = " + range + " km");
       System.out.println("Duration = " + duration + " milliseconds sec");
       System.out.println("Epsilon = " + epsilon + " degree");
       System.out.println("QGridCellSize = " + qGridCellSize + " degree");
       System.out.println("Max num of Points per cell = " + maxPointsPerCell);
-      JavaRDD<Tuple2<STObject, Tuple2<Object, SimpleFeature>>> results =
+      JavaRDD<Tuple2<String, Tuple2<Object, SimpleFeature>>> results =
         spatialRDD
           .cluster(3, epsilon, speed, qGridCellSize, new SerializableFunction1<Tuple2<STObject, SimpleFeature>, String>() {
             @Override
             public String apply(Tuple2<STObject, SimpleFeature> v1) {
               return v1._2().getID();
             }
-          }, true, maxPointsPerCell, scala.Option.apply(null))
+          }, false, maxPointsPerCell, scala.Option.apply(null), envMap)  //envMap
           .toJavaRDD();
 
-      results.mapToPair(t -> {
+      JavaRDD<SimpleFeature> resultsRDD = results.map(t-> {
         Integer clusterId = (Integer) t._2()._1();
+        String clusterLabel = t._1();
         SimpleFeature sf = t._2()._2();
-        return new Tuple2<>(clusterId, sf.getID());
-      }).countByKey().forEach((id, num) -> {
-        System.out.println("ClusterID: " + id + " has " + num + " points.");
+        sf.setAttribute(TweetsFeatureFactory.CLUSTER_ID, clusterId);
+        sf.setAttribute(TweetsFeatureFactory.CLUSTER_LABEL, clusterLabel);
+        sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
+        System.out.println(sf.getID());
+        return sf;
       });
+      jsp.save(resultsRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);
+
+//      results.mapToPair(t -> {
+//        Integer clusterId = (Integer) t._2()._1();
+//        SimpleFeature sf = t._2()._2();
+//        String clusterLabel = t._1();
+//        System.out.println(clusterLabel);
+//        return new Tuple2<>(clusterId, sf.getID());
+//      }).countByKey().forEach((id, num) -> {
+//        System.out.println("ClusterID: " + id + " has " + num + " points.");
+//      });
 
 
 //      System.out.println(tweetsRDD.count());

@@ -1,16 +1,17 @@
 package smash.data.tweets.gt;
 
 import com.google.common.base.Joiner;
-import com.vividsolutions.jts.geom.*;
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.geom.PrecisionModel;
 import org.geotools.factory.Hints;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
-import org.geotools.geojson.feature.FeatureJSON;
 import org.locationtech.geomesa.utils.interop.SimpleFeatureTypes;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import smash.data.tweets.pojo.Tweet;
 
-import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -32,6 +33,8 @@ public class TweetsFeatureFactory {
   public static final String SCREEN_NAME = "screen_name";
   public static final String TOKENS = "tokens";
   public static final String SENTIMENT = "sentiment";
+  public static final String CLUSTER_ID = "cluster_id";
+  public static final String CLUSTER_LABEL = "cluster_label";
 
   public static final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
 
@@ -46,6 +49,8 @@ public class TweetsFeatureFactory {
     attributes.add(SCREEN_NAME + ":String");
     attributes.add(TOKENS + ":String");
     attributes.add(SENTIMENT + ":Integer");
+    attributes.add(CLUSTER_ID + ":Integer");
+    attributes.add(CLUSTER_LABEL + ":String");
 
     String simpleFeatureTypeSchema = Joiner.on(",").join(attributes);
     SimpleFeatureType simpleFeatureType =

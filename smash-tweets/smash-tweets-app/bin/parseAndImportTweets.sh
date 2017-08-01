@@ -57,8 +57,9 @@ ${client_spark_home}/bin/spark-submit \
 --verbose \
 --deploy-mode cluster \
 --master spark://${spark_master_address}:6066 \
---driver-memory 3G \
+--driver-memory 4G \
 --executor-memory 4G \
+--conf spark.eventLog.enabled=true \
 --class "smash.app.tweets.importer.TweetsImporter" \
 --jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
 --conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \

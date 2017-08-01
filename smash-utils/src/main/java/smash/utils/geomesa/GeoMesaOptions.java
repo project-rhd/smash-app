@@ -59,7 +59,7 @@ public class GeoMesaOptions implements Serializable {
     values.put("tableName", this.tableName);
     if (this.auths != null)
       values.put("auths", this.auths);
-    values.put("generateStats", Boolean.FALSE.toString());
+//    values.put("generateStats", Boolean.FALSE.toString());
     return values;
   }
 
