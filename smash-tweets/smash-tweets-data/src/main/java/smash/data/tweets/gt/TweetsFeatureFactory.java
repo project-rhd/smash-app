@@ -56,7 +56,7 @@ public class TweetsFeatureFactory {
     SimpleFeatureType simpleFeatureType =
       SimpleFeatureTypes.createType(FT_NAME, simpleFeatureTypeSchema);
     simpleFeatureType.getUserData()
-      .put(SimpleFeatureTypes.DEFAULT_DATE_KEY, "created_at");
+      .put(SimpleFeatureTypes.DEFAULT_DATE_KEY, CREATED_AT);
     return simpleFeatureType;
   }
 

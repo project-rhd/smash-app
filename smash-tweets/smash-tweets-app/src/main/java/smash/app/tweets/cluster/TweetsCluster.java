@@ -2,6 +2,7 @@ package smash.app.tweets.cluster;
 
 
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.Point;
 import dbis.stark.STObject;
 import dbis.stark.spatial.SpatialRDD;
 import dbis.stark.spatial.SpatialRDDFunctions;
@@ -13,6 +14,8 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
 import org.geotools.data.Query;
 import org.geotools.factory.Hints;
+import org.geotools.filter.text.cql2.CQL;
+import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSpark;
@@ -24,9 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
-import scala.collection.JavaConverters;
+import smash.data.tweets.gt.SpatialClusterFactory;
 import smash.data.tweets.gt.TweetsFeatureFactory;
-import smash.data.tweets.pojo.Tweet;
 import smash.utils.JobTimer;
 import smash.utils.geomesa.GeoMesaDataUtils;
 
@@ -76,11 +78,12 @@ public class TweetsCluster implements Serializable {
 //    sparkConf.set("spark.sql.crossJoin.enabled","true");
   }
 
-  private void run(TweetsClusterOptions options) throws IOException {
+  private void run(TweetsClusterOptions options) throws IOException, CQLException {
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
       SpatialRDDProvider sp = GeoMesaSpark.apply(options.getAccumuloOptions2());
       JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
+      //=== Task 1: Run MR-DBSCAN and save data with cluster flag
       Query query = new Query(TweetsFeatureFactory.FT_NAME);
       JavaRDD<SimpleFeature> tweetsRDD = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
@@ -128,7 +131,7 @@ public class TweetsCluster implements Serializable {
           }, false, maxPointsPerCell, scala.Option.apply(null), envMap)  //envMap
           .toJavaRDD();
 
-      JavaRDD<SimpleFeature> resultsRDD = results.map(t-> {
+      JavaRDD<SimpleFeature> resultsRDD = results.map(t -> {
         Integer clusterId = (Integer) t._2()._1();
         String clusterLabel = t._1();
         SimpleFeature sf = t._2()._2();
@@ -140,25 +143,39 @@ public class TweetsCluster implements Serializable {
       });
       jsp.save(resultsRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);
 
-//      results.mapToPair(t -> {
-//        Integer clusterId = (Integer) t._2()._1();
-//        SimpleFeature sf = t._2()._2();
-//        String clusterLabel = t._1();
-//        System.out.println(clusterLabel);
-//        return new Tuple2<>(clusterId, sf.getID());
-//      }).countByKey().forEach((id, num) -> {
-//        System.out.println("ClusterID: " + id + " has " + num + " points.");
-//      });
 
+      //=== Task 2: Retrieve clustered data and save geo-graphic centre point of each cluster
+      GeoMesaDataUtils.saveFeatureType(options, SpatialClusterFactory.SFT);
+      query.setFilter(CQL.toFilter(TweetsFeatureFactory.CLUSTER_ID + " is not null"));
+      JavaRDD<SimpleFeature> tweetsInCluster = jsp
+        .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
 
-//      System.out.println(tweetsRDD.count());
+      JavaRDD<SimpleFeature> clusterSFRDD = tweetsInCluster.mapToPair(sf -> {
+        Integer clusterId = (Integer) sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID);
+        Date createdAt = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
+        Point p = (Point) sf.getDefaultGeometry();
+        Double lon = p.getX();
+        Double lat = p.getY();
+        String[] parameters = {lon.toString(), lat.toString(), Long.toString(createdAt.getTime()), "1"};
+        return new Tuple2<>(clusterId, parameters);
+      }).reduceByKey((param1, param2) -> {
+        Double lonSum = Double.parseDouble(param1[0]) + Double.parseDouble(param2[0]);
+        Double latSum = Double.parseDouble(param1[1]) + Double.parseDouble(param2[1]);
+        Long timeSum = Long.parseLong(param1[2]) + Long.parseLong(param2[2]);
+        Integer count = Integer.parseInt(param1[3]) + Integer.parseInt(param2[3]);
+        String[] paramSum = {lonSum.toString(), latSum.toString(), timeSum.toString(), count.toString()};
+        return paramSum;
+      }).map(t -> {
+        Integer clusterId = t._1();
+        String[] param = t._2();
+        Integer count = Integer.parseInt(param[3]);
+        Double lon = Double.parseDouble(param[0]) / count;
+        Double lat = Double.parseDouble(param[1]) / count;
+        Long time = Long.parseLong(param[2]) / count;
+        return SpatialClusterFactory.createFeature(clusterId, lon, lat, time, count);
+      });
+      jsp.save(clusterSFRDD, options.getAccumuloOptions(), SpatialClusterFactory.FT_NAME);
 
-//      Dataset<Row> tweets = ss.read()
-//        .format("geomesa")
-//        .options(options.getAccumuloOptions())
-//        .option("geomesa.feature", TweetsFeatureFactory.FT_NAME)
-//        .load();
-//      tweets.show();
 
     }
   }
