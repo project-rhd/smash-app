@@ -41,7 +41,15 @@
       <classifier>models</classifier>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.bahir</groupId>
+      <artifactId>spark-streaming-twitter_2.11</artifactId>
+      <version>${spark.version}</version>
+    </dependency>
+
   </dependencies>
+
+
 
   <dependencyManagement>
     <dependencies>
