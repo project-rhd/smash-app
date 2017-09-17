@@ -1,18 +1,7 @@
 package smash.app.tweets.importer;
 
 import junit.framework.TestCase;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.data.tweets.pojo.Tweet;
-import smash.utils.geomesa.FeatureWriterOnSpark;
-import smash.utils.geomesa.GeoMesaDataUtils;
-import smash.utils.geomesa.GeoMesaOptions;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Created by Yikai Gong on 10/04/17.

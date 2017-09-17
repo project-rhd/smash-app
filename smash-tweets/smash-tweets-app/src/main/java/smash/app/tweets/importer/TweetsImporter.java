@@ -27,7 +27,6 @@ import smash.data.tweets.pojo.Tweet;
 import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
-import smash.utils.spark.FeatureRDDToGeoMesa;
 
 import java.io.IOException;
 import java.util.*;

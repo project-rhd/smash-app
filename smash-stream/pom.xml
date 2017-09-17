@@ -3,16 +3,20 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
-    <artifactId>smash-tweets</artifactId>
+    <artifactId>smash-app</artifactId>
     <groupId>smash</groupId>
     <version>0.1.0</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>smash-tweets-app</artifactId>
-  <packaging>jar</packaging>
+  <artifactId>smash-stream</artifactId>
 
   <dependencies>
+    <dependency>
+      <groupId>smash</groupId>
+      <artifactId>smash-utils</artifactId>
+      <version>0.1.0</version>
+    </dependency>
     <dependency>
       <groupId>smash</groupId>
       <artifactId>smash-tweets-data</artifactId>
@@ -20,53 +24,17 @@
     </dependency>
     <dependency>
       <groupId>smash</groupId>
-      <artifactId>smash-utils</artifactId>
+      <artifactId>smash-scats-data</artifactId>
       <version>0.1.0</version>
     </dependency>
 
     <dependency>
-      <groupId>dbis-ilm</groupId>
-      <artifactId>stark</artifactId>
-      <version>0.1.0</version>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-kafka-0-8_2.11</artifactId>
+      <version>${spark.version}</version>
     </dependency>
-    <dependency>
-      <groupId>edu.stanford.nlp</groupId>
-      <artifactId>stanford-corenlp</artifactId>
-      <version>3.7.0</version>
-    </dependency>
-    <dependency>
-      <groupId>edu.stanford.nlp</groupId>
-      <artifactId>stanford-corenlp</artifactId>
-      <version>3.7.0</version>
-      <classifier>models</classifier>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka-clients</artifactId>
-      <version>0.11.0.1</version>
-    </dependency>
-
   </dependencies>
 
-
-
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>org.locationtech.geomesa</groupId>
-        <artifactId>geomesa-accumulo-datastore_2.11</artifactId>
-        <version>${geomesa.version}</version>
-        <exclusions>
-          <!-- Conflict dependency with stanford NLP -->
-          <exclusion>
-            <groupId>com.googlecode.efficient-java-matrix-library</groupId>
-            <artifactId>core</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
 
   <build>
     <plugins>
@@ -114,21 +82,21 @@
               </filters>
               <relocations>
                 <!--<relocation>-->
-                  <!--<pattern>com.clearspring.analytics</pattern>-->
-                  <!--<shadedPattern>org.locationtech.geomesa.shaded.com.clearspring.analytics</shadedPattern>-->
+                <!--<pattern>com.clearspring.analytics</pattern>-->
+                <!--<shadedPattern>org.locationtech.geomesa.shaded.com.clearspring.analytics</shadedPattern>-->
                 <!--</relocation>-->
 
                 <!--<relocation>-->
-                  <!--<pattern>com.google.common</pattern>-->
-                  <!--<shadedPattern>org.locationtech.geomesa.shaded.com.google.common</shadedPattern>-->
+                <!--<pattern>com.google.common</pattern>-->
+                <!--<shadedPattern>org.locationtech.geomesa.shaded.com.google.common</shadedPattern>-->
                 <!--</relocation>-->
                 <!--<relocation>-->
-                  <!--<pattern>org.apache.commons.codec</pattern>-->
-                  <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.commons.codec</shadedPattern>-->
+                <!--<pattern>org.apache.commons.codec</pattern>-->
+                <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.commons.codec</shadedPattern>-->
                 <!--</relocation>-->
                 <!--<relocation>-->
-                  <!--<pattern>org.apache.thrift</pattern>-->
-                  <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.thrift</shadedPattern>-->
+                <!--<pattern>org.apache.thrift</pattern>-->
+                <!--<shadedPattern>org.locationtech.geomesa.shaded.org.apache.thrift</shadedPattern>-->
                 <!--</relocation>-->
               </relocations>
             </configuration>
@@ -137,4 +105,5 @@
       </plugin>
     </plugins>
   </build>
+
 </project>
