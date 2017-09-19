@@ -1,17 +1,9 @@
 package smash.utils.streamTasks.ingest;
 
-import org.geotools.data.DataUtilities;
-import org.geotools.data.simple.SimpleFeatureCollection;
 import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
 import org.slf4j.Logger;
-import smash.utils.geomesa.GeoMesaDataUtils;
-import smash.utils.geomesa.GeoMesaFeatureWriter;
-import smash.utils.geomesa.GeoMesaOptions;
 import smash.utils.streamTasks.AbstractTask;
 import smash.utils.streamTasks.StreamTaskWriter;
-
-import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
 
@@ -19,33 +11,19 @@ import java.util.Properties;
  * @author Yikai Gong
  */
 
-public class SFIngestTask<T> extends AbstractTask {
+public class SFIngestTask<T, U> extends AbstractTask<T, U> {
   public static final String PROP_WRITER = "writer";
-  private static SFIngestTask instance;
 
   private final Object locker = new Object();
   private boolean doneSetup = false;
   private StreamTaskWriter<T> writer;
 
-  public static <U> SFIngestTask<U> createOrGetSingleton(Logger l_, Properties p_) {
-    synchronized (PROP_WRITER) {
-      if (instance == null) {
-        System.out.println("new");
-        instance = new SFIngestTask<U>(l_, p_);
-      }
-    }
-    return instance;
-  }
+  private static final ThreadLocal<SFIngestTask> t =
+    ThreadLocal.withInitial(SFIngestTask::new);
 
-  private static final ThreadLocal<SFIngestTask> t = new ThreadLocal<SFIngestTask>(){
-    @Override
-    protected SFIngestTask initialValue() {
-      return new SFIngestTask();
-    }
-  };
-
-  public static SFIngestTask getThreadSingleton (Logger l_, Properties p_){
-    SFIngestTask singleton = t.get();
+  @SuppressWarnings("unchecked")
+  public static <T, U> SFIngestTask<T, U> getThreadSingleton (Logger l_, Properties p_){
+    SFIngestTask<T, U> singleton = (SFIngestTask<T, U>) t.get();
     singleton.setup(l_, p_);
     return singleton;
   }

@@ -34,23 +34,23 @@ hdfs_root=hdfs://${hadoop_master_address}:9000
 input_file_url=${hdfs_root}${INPUT_FILE}
 directory_file_url=${hdfs_root}${DIRECTORY_FILE}
 
-#echo "Task 1: Build application jar locally"
-#mvn -f ${app_base}/../../pom.xml -pl smash-tweets/smash-tweets-app clean install -am -DskipTests
-#if [ $? -eq 0 ]; then
-#    echo "Task 1 Finished"
-#else
-#    echo "Error. Failed in task 1"
-#    exit 1
-#fi
-#
-#echo "Task 2: Upload jar to remote HDFS:" ${hdfs_root}${jar_hdfs_dir}
-#${client_hadoop_home}/bin/hdfs dfs -put -f ${app_base}/target/${jar_name} ${hdfs_root}${jar_hdfs_dir}
-#if [ $? -eq 0 ]; then
-#    echo "Task 2 Finished"
-#else
-#    echo "Error. Failed in Task 2"
-#    exit 1
-#fi
+echo "Task 1: Build application jar locally"
+mvn -f ${app_base}/../../pom.xml -pl smash-tweets/smash-tweets-app clean install -am -DskipTests
+if [ $? -eq 0 ]; then
+    echo "Task 1 Finished"
+else
+    echo "Error. Failed in task 1"
+    exit 1
+fi
+
+echo "Task 2: Upload jar to remote HDFS:" ${hdfs_root}${jar_hdfs_dir}
+${client_hadoop_home}/bin/hdfs dfs -put -f ${app_base}/target/${jar_name} ${hdfs_root}${jar_hdfs_dir}
+if [ $? -eq 0 ]; then
+    echo "Task 2 Finished"
+else
+    echo "Error. Failed in Task 2"
+    exit 1
+fi
 
 echo "Task 3: Submit task in cluster mode to the spark master:" spark://${spark_master_address}:6066
 ${client_spark_home}/bin/spark-submit \

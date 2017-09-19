@@ -3,11 +3,11 @@ package smash.utils.spark;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.opengis.feature.simple.SimpleFeature;
-import smash.utils.geomesa.GeoMesaFeatureWriter;
+import smash.utils.geomesa.GeoMesaWriter;
 import smash.utils.geomesa.GeoMesaOptions;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * @author Yikai Gong
@@ -20,35 +20,31 @@ public class FeatureRDDToGeoMesa {
                           JavaSparkContext jsc) {
     JavaRDD<Long> countFeatures = featureRDD.mapPartitions(featureIterator -> {
       long i = 0;
-      GeoMesaFeatureWriter writer = null;
-      if (featureIterator.hasNext()) {
-        SimpleFeature simpleFeature = featureIterator.next();
-        String stfName = simpleFeature.getFeatureType().getTypeName();
-        writer = GeoMesaFeatureWriter.createOrGetSingleton(options, stfName);
-        boolean saved = writer.write(simpleFeature);
+      GeoMesaWriter writer = null;
+      String stfName = null;
+      while (featureIterator.hasNext()) {
+        SimpleFeature sf = featureIterator.next();
+        if (stfName == null)
+          stfName = sf.getFeatureType().getTypeName();
+        if (writer == null)
+          writer = GeoMesaWriter.getThreadSingleton(options, stfName);
+        boolean saved = writer.write(sf);
         if (saved)
           i++;
       }
-      while (featureIterator.hasNext() && writer!=null) {
-        SimpleFeature simpleFeature = featureIterator.next();
-        boolean saved = writer.write(simpleFeature);
-        if (saved)
-          i++;
-      }
+      if (writer != null)
+        writer.flush();
       return Arrays.asList(i).iterator();
     });
-    Long numberOfSavedFeatures = countFeatures.reduce((a, b) -> a+b);
+    Long numberOfSavedFeatures = countFeatures.reduce((a, b) -> a + b);
 
-    closeFeatureWriterOnSparkExecutors(jsc);
+//    closeFeatureWriterOnSparkExecutors(jsc);
     return numberOfSavedFeatures;
   }
 
-  public static void closeFeatureWriterOnSparkExecutors(JavaSparkContext jsc){
-    List data1 = Arrays.asList(new Integer[]{Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3)});
-    JavaRDD distData1 = jsc.parallelize(data1, 100);
-    distData1.foreachPartition((integerIterator) -> {
-      GeoMesaFeatureWriter.purgeSingleton();
-    });
+  public static void closeFeatureWriterOnSparkExecutors(JavaSparkContext jsc) {
+    jsc.parallelize(new ArrayList<>())
+      .foreachPartition(p -> GeoMesaWriter.getThreadSingleton().close());
   }
 
 }

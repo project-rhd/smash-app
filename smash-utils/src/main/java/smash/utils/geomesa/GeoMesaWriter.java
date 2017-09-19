@@ -3,7 +3,6 @@ package smash.utils.geomesa;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
 import org.geotools.data.Transaction;
-import org.geotools.data.simple.SimpleFeatureCollection;
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore;
 import org.locationtech.geomesa.index.geotools.GeoMesaFeatureStore;
 import org.locationtech.geomesa.utils.geotools.FeatureUtils;
@@ -13,40 +12,35 @@ import org.slf4j.LoggerFactory;
 import smash.utils.streamTasks.StreamTaskWriter;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * @author Yikai Gong
  */
 
-public class GeoMesaFeatureWriter implements StreamTaskWriter<SimpleFeature> {
-  private static final Logger logger = LoggerFactory.getLogger(GeoMesaFeatureWriter.class);
-  private static GeoMesaFeatureWriter instance = null;
+public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
+  private static final Logger logger = LoggerFactory.getLogger(GeoMesaWriter.class);
+  private static final ThreadLocal<GeoMesaWriter> t =
+    ThreadLocal.withInitial(() -> new GeoMesaWriter());
 
   private final Object locker = new Object();
   private GeoMesaFeatureStore geoMesaFeatureStore = null;
   private org.locationtech.geomesa.index.geotools.GeoMesaFeatureWriter geoMesaFeatureWriter = null;
 
-  public static GeoMesaFeatureWriter createOrGetSingleton(GeoMesaOptions options, String typeName) throws IOException {
-    synchronized (logger) {
-      if (instance == null)
-        instance = new GeoMesaFeatureWriter(options, typeName);
-      else
-        instance.lazyInit(options, typeName);
-    }
-    return instance;
+  public static GeoMesaWriter getThreadSingleton(GeoMesaOptions op, String tn)
+    throws IOException {
+    GeoMesaWriter singleton = t.get();
+    singleton.lazyInit(op, tn);
+    return singleton;
   }
 
-  public static void purgeSingleton() {
-    synchronized (logger) {
-      if (instance != null) {
-        instance.close();
-        instance = null;
-      }
-    }
+  public static GeoMesaWriter getThreadSingleton() {
+    return t.get();
   }
 
-  public GeoMesaFeatureWriter(GeoMesaOptions options, String typeName) throws IOException {
+  public GeoMesaWriter() {
+  }
+
+  public GeoMesaWriter(GeoMesaOptions options, String typeName) throws IOException {
     synchronized (this.locker) {
       this.lazyInit(options, typeName);
     }
@@ -68,6 +62,7 @@ public class GeoMesaFeatureWriter implements StreamTaskWriter<SimpleFeature> {
         (GeoMesaFeatureStore) dataStore.getFeatureSource(typeName);
     }
     if (geoMesaFeatureWriter == null) {
+      System.out.println("Init geoMesaFeatureWriter");
       logger.info("Init geoMesaFeatureWriter");
       geoMesaFeatureWriter = ((GeoMesaDataStore) geoMesaFeatureStore
         .getDataStore()).getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT);
@@ -80,29 +75,23 @@ public class GeoMesaFeatureWriter implements StreamTaskWriter<SimpleFeature> {
    * @param simpleFeature
    * @throws IOException
    */
-  public boolean write(SimpleFeature simpleFeature) throws IOException {
+  public boolean write(SimpleFeature simpleFeature) {
     synchronized (this.locker) {
-      if(geoMesaFeatureWriter != null){
-        FeatureUtils.copyToWriter(geoMesaFeatureWriter, simpleFeature, false);
-        geoMesaFeatureWriter.write();
-        return true;
+      if (geoMesaFeatureWriter != null) {
+        try {
+          FeatureUtils.copyToWriter(geoMesaFeatureWriter, simpleFeature, false);
+          geoMesaFeatureWriter.write();
+          return true;
+        } catch (IOException e) {
+          logger.error(e.getMessage());
+          return false;
+        }
+      } else{
+        logger.error("geoMesaFeatureWriter has not been initiated");
+        return false;
       }
     }
-    return false;
   }
-
-//  /**
-//   * Write features into Accumulo/GeoMesa without closing connection
-//   *
-//   * @param simpleFeatures
-//   * @throws IOException
-//   */
-//  public static void writeFeatures(SimpleFeatureCollection simpleFeatures) throws IOException {
-////    for (SimpleFeature feature : simpleFeatures) {
-////      write(feature);
-////    }
-//    geoMesaFeatureStore.addFeatures(simpleFeatures);
-//  }
 
   /**
    * Flush data into Accumulo
@@ -122,13 +111,14 @@ public class GeoMesaFeatureWriter implements StreamTaskWriter<SimpleFeature> {
         geoMesaFeatureWriter.close();
         geoMesaFeatureWriter = null;
         geoMesaFeatureStore = null;
+        System.out.println("geoMesaFeatureWriter closed");
         logger.info("geoMesaFeatureWriter closed");
       }
     }
   }
 
-  public boolean isClose(){
-      return geoMesaFeatureWriter == null;
+  public boolean isClose() {
+    return geoMesaFeatureWriter == null;
   }
 }
 

@@ -1,6 +1,8 @@
 package smash.data.tweets.pojo;
 
 import com.google.gson.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.List;
@@ -10,6 +12,8 @@ import java.util.List;
  */
 
 public class Tweet implements Serializable {
+  private static final Logger logger = LoggerFactory.getLogger(Tweet.class);
+
   // Raw data field
   private String id_str;
   private String text;
@@ -28,8 +32,8 @@ public class Tweet implements Serializable {
     return gson.fromJson(j, Tweet.class);
   }
 
-  public static Tweet fromJSON(String jsonStr) {
-    return gson.fromJson(jsonStr, Tweet.class);
+  public static Tweet fromJSON(String jsonStr) throws JsonSyntaxException{
+      return gson.fromJson(jsonStr, Tweet.class);
   }
 
   public String toJSON() {

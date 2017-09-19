@@ -1,5 +1,6 @@
 package smash.stream.tweets;
 
+import com.google.gson.JsonSyntaxException;
 import kafka.serializer.StringDecoder;
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Durations;
@@ -15,7 +16,7 @@ import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.data.tweets.pojo.Tweet;
 import smash.utils.JobTimer;
 import smash.utils.geomesa.GeoMesaDataUtils;
-import smash.utils.geomesa.GeoMesaFeatureWriter;
+import smash.utils.geomesa.GeoMesaWriter;
 import smash.utils.geomesa.GeoMesaOptions;
 import smash.utils.streamTasks.StreamTaskWriter;
 import smash.utils.streamTasks.ingest.SFIngestTask;
@@ -80,7 +81,12 @@ public class TweetsStreamImporter {
     directKafkaStream.toJavaDStream().foreachRDD(tuple2JavaRDD -> {
       tuple2JavaRDD.foreach(tuple -> {
         // Create map data to ingest
-        Tweet t = Tweet.fromJSON(tuple._2);
+        Tweet t = null;
+        try {
+          t = Tweet.fromJSON(tuple._2);
+        } catch (JsonSyntaxException ignored) {
+          logger.warn(ignored.getMessage());
+        }
         if (t == null || t.getCoordinates() == null)
           return;
         SimpleFeature sf = TweetsFeatureFactory.createFeature(t);
@@ -89,19 +95,19 @@ public class TweetsStreamImporter {
         // Create ingest task
         Properties p = new Properties();
         StreamTaskWriter<SimpleFeature> writer =
-          GeoMesaFeatureWriter.createOrGetSingleton(options, sf.getFeatureType().getTypeName());
+          GeoMesaWriter.getThreadSingleton(options, sf.getFeatureType().getTypeName());
         p.put(SFIngestTask.PROP_WRITER, writer);
 
-        SFIngestTask ingestTask = SFIngestTask.getThreadSingleton(logger, p);
+        SFIngestTask<SimpleFeature, Object> ingestTask = SFIngestTask.getThreadSingleton(logger, p);
         // Execute task
         ingestTask.doTask(toIngest);
-//        System.out.println(t.getId_str());
+        System.out.println(t.getId_str());
       });
     });
 
 
     // Step 3. Start the SparkStreaming context
-    ssc.sparkContext().setLogLevel("ERROR");
+    ssc.sparkContext().setLogLevel("WARN");
     ssc.start();
     ssc.awaitTermination();
   }

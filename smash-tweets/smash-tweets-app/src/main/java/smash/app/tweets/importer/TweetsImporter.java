@@ -27,6 +27,7 @@ import smash.data.tweets.pojo.Tweet;
 import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
+import smash.utils.spark.FeatureRDDToGeoMesa;
 
 import java.io.IOException;
 import java.util.*;
@@ -112,11 +113,18 @@ public class TweetsImporter {
         return tweets.iterator();
       });
       SpatialRDDProvider sp = GeoMesaSpark.apply(options.getAccumuloOptions2());
-      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
-      jsp.save(featureRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);
-//      Long numSaved = FeatureRDDToGeoMesa.save(options, featureRDD, sc);
+//      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
+//      jsp.save(featureRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);
+//      Long numSaved = featureRDD.count();
 
-      Long numSaved = featureRDD.count();
+      Long numSaved = FeatureRDDToGeoMesa.save(options, featureRDD, sc);
+      FeatureRDDToGeoMesa.closeFeatureWriterOnSparkExecutors(sc);
+
+//      System.out.println(sc.defaultParallelism());
+//      sc.parallelize(new ArrayList<>()).foreachPartition(p -> {
+//        System.out.println("Thread Name: " + Thread.currentThread().getName());
+//        System.out.println("Thread ID: " + Thread.currentThread().getId());
+//      });
       System.out.println("Ingested " + numSaved + " tweets");
     }
   }
