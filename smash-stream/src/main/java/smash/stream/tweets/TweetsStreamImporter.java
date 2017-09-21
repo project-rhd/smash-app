@@ -20,6 +20,7 @@ import smash.utils.geomesa.GeoMesaWriter;
 import smash.utils.geomesa.GeoMesaOptions;
 import smash.utils.streamTasks.StreamTaskWriter;
 import smash.utils.streamTasks.ingest.SFIngestTask;
+import smash.utils.streamTasks.ml.SentimentAnalysis;
 
 import java.io.IOException;
 import java.util.*;
@@ -82,13 +83,27 @@ public class TweetsStreamImporter {
       tuple2JavaRDD.foreach(tuple -> {
         // Create map data to ingest
         Tweet t = null;
+        //Filter
         try {
           t = Tweet.fromJSON(tuple._2);
         } catch (JsonSyntaxException ignored) {
           logger.warn(ignored.getMessage());
         }
-        if (t == null || t.getCoordinates() == null)
+        if (t == null || t.getCoordinates() == null){
           return;
+        }
+        // Sentiment Analysis
+        SentimentAnalysis<String, Map.Entry<Integer, List<String>>> sentTask =
+          SentimentAnalysis.getThreadSingleton(logger, null);
+        Map<String, String> input = new HashMap<>();
+        input.put(t.getId_str(), t.getText());
+        sentTask.doTask(input);
+        Map.Entry<Integer, List<String>> result = sentTask.getLastResult();
+        t.setSentiment(result.getKey());
+        t.setTokens(result.getValue());
+//        System.out.println(t.getSentiment());
+
+        // Ingest
         SimpleFeature sf = TweetsFeatureFactory.createFeature(t);
         Map<String, SimpleFeature> toIngest = new HashMap<>();
         toIngest.put(tuple._1, sf);
@@ -101,7 +116,8 @@ public class TweetsStreamImporter {
         SFIngestTask<SimpleFeature, Object> ingestTask = SFIngestTask.getThreadSingleton(logger, p);
         // Execute task
         ingestTask.doTask(toIngest);
-        System.out.println(t.getId_str());
+        System.out.println(t.getId_str()); 
+//        System.out.println(Thread.currentThread().getName());
       });
     });
 

@@ -19,7 +19,6 @@ import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSpark;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
-import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
 import org.opengis.feature.simple.SimpleFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +27,7 @@ import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.JobTimer;
 import smash.utils.spark.FeatureRDDToGeoMesa;
+import smash.utils.streamTasks.ml.Sentiment;
 
 import java.io.IOException;
 import java.util.*;

@@ -80,6 +80,4 @@ public abstract class AbstractTask<T, U> implements ITask<T, U> {
     l.debug("finished task tearDown");
     return sw.getTime() / counter;
   }
-
-
 }

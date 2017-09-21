@@ -34,7 +34,7 @@ public class TweetsStreamImporterTest {
     options.tableName = "tweets2";
     options.zookeepers = "scats-1-master:2181";
     options.overwrite = true;
-    SparkConf conf = new SparkConf().setMaster("local[2]");
+    SparkConf conf = new SparkConf().setMaster("local[1]");
     TweetsStreamImporter importer = new TweetsStreamImporter(conf);
 
     JobTimer.print(() -> {

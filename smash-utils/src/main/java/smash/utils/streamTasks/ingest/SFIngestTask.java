@@ -4,6 +4,7 @@ import org.opengis.feature.simple.SimpleFeature;
 import org.slf4j.Logger;
 import smash.utils.streamTasks.AbstractTask;
 import smash.utils.streamTasks.StreamTaskWriter;
+
 import java.util.Map;
 import java.util.Properties;
 
@@ -22,7 +23,7 @@ public class SFIngestTask<T, U> extends AbstractTask<T, U> {
     ThreadLocal.withInitial(SFIngestTask::new);
 
   @SuppressWarnings("unchecked")
-  public static <T, U> SFIngestTask<T, U> getThreadSingleton (Logger l_, Properties p_){
+  public static <T, U> SFIngestTask<T, U> getThreadSingleton(Logger l_, Properties p_) {
     SFIngestTask<T, U> singleton = (SFIngestTask<T, U>) t.get();
     singleton.setup(l_, p_);
     return singleton;
@@ -30,13 +31,13 @@ public class SFIngestTask<T, U> extends AbstractTask<T, U> {
 
   public SFIngestTask() {
     super();
-    System.out.println("new "+ this.getClass().getSimpleName());
+    System.out.println("new " + this.getClass().getSimpleName());
   }
 
   public SFIngestTask(Logger l_, Properties p_) {
     super();
     this.setup(l_, p_);
-    System.out.println("new "+ this.getClass().getSimpleName());
+    System.out.println("new " + this.getClass().getSimpleName());
   }
 
   public void setup(Logger l_, Properties p_) {
@@ -51,15 +52,15 @@ public class SFIngestTask<T, U> extends AbstractTask<T, U> {
   }
 
   @Override
-  protected Float doTaskLogic(Map map) {
+  protected Float doTaskLogic(Map<String, T> map) {
     if (!doneSetup || writer == null) {
       l.warn("Task:  " + this.getClass().getSimpleName() + " has not been fully setup");
       return 0F;
     }
     Float result = 1F;
-    for (Object v : map.values()) {
+    for (T v : map.values()) {
       try {
-        writer.write((T) v);
+        writer.write(v);
       } catch (Exception e) {
         l.error(e.getMessage());
         result = 0F;

@@ -58,6 +58,9 @@ ${client_spark_home}/bin/spark-submit \
 --driver-memory 4G \
 --executor-memory 4G \
 --conf spark.eventLog.enabled=true \
+--jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
+--conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
+--conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
 --class "smash.stream.tweets.TweetsStreamImporter" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \

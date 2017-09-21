@@ -1,4 +1,4 @@
-package smash.app.tweets.importer;
+package smash.utils.streamTasks.ml;
 
 /**
  * Enumeration of sentiment
@@ -7,7 +7,7 @@ public enum Sentiment {
 
   NEGATIVE, NEUTRAL, POSITIVE;
 
-  static Sentiment getSentiment(int sentimentClass) {
+  public static Sentiment getSentiment(int sentimentClass) {
 
     if (sentimentClass == 2 || sentimentClass > 4 || sentimentClass < 0) {
       return Sentiment.NEUTRAL;
