@@ -32,5 +32,24 @@
       <classifier>models</classifier>
       <scope>provided</scope>
     </dependency>
+
   </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.locationtech.geomesa</groupId>
+        <artifactId>geomesa-accumulo-datastore_2.11</artifactId>
+        <version>${geomesa.version}</version>
+        <exclusions>
+          <!-- Conflict dependency with stanford NLP -->
+          <exclusion>
+            <groupId>com.googlecode.efficient-java-matrix-library</groupId>
+            <artifactId>core</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
 </project>

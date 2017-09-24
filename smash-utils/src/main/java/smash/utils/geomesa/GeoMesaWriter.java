@@ -1,17 +1,21 @@
 package smash.utils.geomesa;
 
-import org.geotools.data.DataStore;
-import org.geotools.data.DataStoreFinder;
-import org.geotools.data.Transaction;
+import org.apache.commons.collections.iterators.ArrayListIterator;
+import org.geotools.data.*;
+import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.data.simple.SimpleFeatureIterator;
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore;
 import org.locationtech.geomesa.index.geotools.GeoMesaFeatureStore;
 import org.locationtech.geomesa.utils.geotools.FeatureUtils;
 import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import smash.utils.streamTasks.StreamTaskWriter;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
 
 /**
  * @author Yikai Gong
@@ -91,6 +95,15 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
         return false;
       }
     }
+  }
+
+  public Iterator<SimpleFeature> read (Filter q) {
+    if (geoMesaFeatureStore == null){
+      logger.error("geoMesaFeatureStore has not been initiated");
+      return new ArrayList<SimpleFeature>().iterator();
+    }
+    SimpleFeatureCollection collection = geoMesaFeatureStore.getFeatures(q);
+    return DataUtilities.iterator(collection.features());
   }
 
   /**

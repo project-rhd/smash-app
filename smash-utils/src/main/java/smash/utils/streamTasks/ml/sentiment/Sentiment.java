@@ -1,4 +1,4 @@
-package smash.utils.streamTasks.ml;
+package smash.utils.streamTasks.ml.sentiment;
 
 /**
  * Enumeration of sentiment

@@ -5,12 +5,14 @@ import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.PrecisionModel;
+import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.Hints;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.locationtech.geomesa.utils.interop.SimpleFeatureTypes;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import smash.data.tweets.pojo.Tweet;
+import smash.data.tweets.pojo.TweetCoordinates;
 
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -86,5 +88,22 @@ public class TweetsFeatureFactory {
     feature.setAttribute(SENTIMENT, tweet.getSentiment());
 
     return feature;
+  }
+
+  public static Tweet fromSFtoPojo(SimpleFeature sf) {
+    Tweet t = new Tweet();
+    String[] fid = sf.getID().split("-");
+    if (!fid[0].equals("tweet")) return null;
+    t.setId_str(fid[1]);
+    Double lon = ((Point)sf.getDefaultGeometry()).getX();
+    Double lat = ((Point)sf.getDefaultGeometry()).getY();
+    t.setCoordinates(new TweetCoordinates(lon, lat));
+    return t;
+  }
+
+  public static String getObjId(SimpleFeature sf){
+    String[] fid = sf.getID().split("-");
+    if (!fid[0].equals("tweet")) return null;
+    return fid[1];
   }
 }

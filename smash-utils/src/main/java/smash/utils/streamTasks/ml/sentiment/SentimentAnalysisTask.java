@@ -1,4 +1,4 @@
-package smash.utils.streamTasks.ml;
+package smash.utils.streamTasks.ml.sentiment;
 
 import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.CoreLabel;
@@ -10,7 +10,6 @@ import edu.stanford.nlp.trees.Tree;
 import edu.stanford.nlp.util.CoreMap;
 import org.slf4j.Logger;
 import smash.utils.streamTasks.AbstractTask;
-import smash.utils.streamTasks.ingest.SFIngestTask;
 
 import java.util.*;
 
@@ -18,14 +17,14 @@ import java.util.*;
  * @author Yikai Gong
  */
 
-public class SentimentAnalysis<T extends String, U extends Map.Entry<Integer, List<String>>> extends AbstractTask<T, U> {
+public class SentimentAnalysisTask<T extends String, U extends Map.Entry<Integer, List<String>>> extends AbstractTask<T, U> {
   private static StanfordCoreNLP pipeline;
-  private static final ThreadLocal<SentimentAnalysis<String, Map.Entry<Integer, List<String>>>> t =
-    ThreadLocal.withInitial(SentimentAnalysis::new);
+  private static final ThreadLocal<SentimentAnalysisTask<String, Map.Entry<Integer, List<String>>>> t =
+    ThreadLocal.withInitial(SentimentAnalysisTask::new);
 
   @SuppressWarnings("unchecked")
-  public static SentimentAnalysis<String, Map.Entry<Integer, List<String>>> getThreadSingleton(Logger l_, Properties p_) {
-    SentimentAnalysis singleton = t.get();
+  public static SentimentAnalysisTask<String, Map.Entry<Integer, List<String>>> getThreadSingleton(Logger l_, Properties p_) {
+    SentimentAnalysisTask singleton = t.get();
     singleton.setup(l_, p_);
     return singleton;
   }
@@ -50,16 +49,16 @@ public class SentimentAnalysis<T extends String, U extends Map.Entry<Integer, Li
         "NNS", "NNP", "NNPS", "RB", "RP", "VB", "VBD", "VBG", "VBN", "VBP",
         "VBZ", "WRB"));
       if (pipeline == null) {
-        SentimentAnalysis.pipeline = new StanfordCoreNLP(props);
+        SentimentAnalysisTask.pipeline = new StanfordCoreNLP(props);
       }
     }
     doneSetup = true;
   }
 
-  public SentimentAnalysis() {
+  public SentimentAnalysisTask() {
   }
 
-  public SentimentAnalysis(Logger l_, Properties p_) {
+  public SentimentAnalysisTask(Logger l_, Properties p_) {
     this();
     setup(l_, p_);
   }
@@ -71,6 +70,10 @@ public class SentimentAnalysis<T extends String, U extends Map.Entry<Integer, Li
       return 0F;
     }
     for (T v : map.values()) {
+      if(v == null){
+        l.warn("Input txt is null");
+        continue;
+      }
       List<String> tokens = new ArrayList<>();
       Integer score = sentimentAnalyze(v, tokens);
       Map<Integer, List<String>> result = new HashMap<>();

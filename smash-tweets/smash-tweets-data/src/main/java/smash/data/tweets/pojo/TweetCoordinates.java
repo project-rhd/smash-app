@@ -2,13 +2,14 @@ package smash.data.tweets.pojo;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * @author Yikai Gong
  */
 
-public class TweetCoordinates implements Serializable{
+public class TweetCoordinates implements Serializable {
   private String type;
   // Order in lon-lat. Follow the GeoJSON/WKT standard which JTS is holing on
   // Ref: http://www.macwright.org/lonlat/
@@ -16,6 +17,14 @@ public class TweetCoordinates implements Serializable{
   private List<BigDecimal> coordinates;
 
   public TweetCoordinates() {
+  }
+
+  public TweetCoordinates(Double lon, Double lat) {
+    this();
+    type = "point";
+    List<BigDecimal> l = new ArrayList<>();
+    l.add(0, BigDecimal.valueOf(lon));
+    l.add(1, BigDecimal.valueOf(lat));
   }
 
   public String getType() {
@@ -34,11 +43,11 @@ public class TweetCoordinates implements Serializable{
     this.coordinates = coordinates;
   }
 
-  public BigDecimal getLon(){
+  public BigDecimal getLon() {
     return coordinates.get(0);
   }
 
-  public BigDecimal getLat(){
+  public BigDecimal getLat() {
     return coordinates.get(1);
   }
 

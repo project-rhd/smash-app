@@ -13,4 +13,5 @@ public interface StreamTaskWriter<T> {
   public void flush();
 
   public void close();
+
 }
