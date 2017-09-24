@@ -51,7 +51,7 @@ public class TweetsFeatureFactory {
     attributes.add(SCREEN_NAME + ":String");
     attributes.add(TOKENS + ":String");
     attributes.add(SENTIMENT + ":Integer");
-    attributes.add(CLUSTER_ID + ":Integer");
+    attributes.add(CLUSTER_ID + ":String");
     attributes.add(CLUSTER_LABEL + ":String");
 
     String simpleFeatureTypeSchema = Joiner.on(",").join(attributes);

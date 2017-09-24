@@ -33,7 +33,7 @@ public class TweetsStreamImporterTest {
     options.instanceId = "smash";
     options.tableName = "tweets2";
     options.zookeepers = "scats-1-master:2181";
-    options.overwrite = false;
+    options.overwrite = true;
     SparkConf conf = new SparkConf().setMaster("local[2]");
     TweetsStreamImporter importer = new TweetsStreamImporter(conf);
 

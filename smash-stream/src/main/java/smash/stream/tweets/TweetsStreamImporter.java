@@ -11,12 +11,16 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
+import org.calrissian.mango.domain.Tuple;
+import org.geotools.data.Join;
+import org.geotools.factory.Hints;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.joda.time.DateTime;
@@ -36,6 +40,9 @@ import smash.utils.JobTimer;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.geomesa.GeoMesaWriter;
 import smash.utils.geomesa.GeoMesaOptions;
+import smash.utils.spark.FeatureRDDToGeoMesa;
+import smash.utils.streamTasks.StreamTaskWriter;
+import smash.utils.streamTasks.ingest.SFIngestTask;
 import smash.utils.streamTasks.ml.spatioTemporal.CellsPartitioner;
 import smash.utils.streamTasks.ml.spatioTemporal.ClusterCell;
 import smash.utils.streamTasks.ml.spatioTemporal.DbscanTask;
@@ -177,7 +184,8 @@ public class TweetsStreamImporter {
 
       // Phase-3: Union two RDDs and apply Fast-Partition
       JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> stObj1);
-      union.persist(StorageLevel.MEMORY_ONLY());
+      //TODO Memory only could be better
+      union.persist(StorageLevel.MEMORY_AND_DISK());
       List<Vector<Double>> points = union.map(tuple -> tuple._2.getCoordinates()).collect();
       ClusterCell topCell = new ClusterCell("0", points, bbox);
       CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon);
@@ -186,6 +194,7 @@ public class TweetsStreamImporter {
 
       // Phase-4: Broadcast cells information. Shuffle data and do local DBSCAN
       Broadcast<Map<String, ClusterCell>> b_cellsMap = ssc.sparkContext().broadcast(map);
+      // <cellId or "NOISE", Iterable<STOjb>>
       JavaPairRDD<String, Iterable<STObj>> shuffledPairRDD = union.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
         Vector<Double> coordinate = tuple._2.getCoordinates();
@@ -202,6 +211,7 @@ public class TweetsStreamImporter {
         return result.iterator();
       }).groupByKey();
 
+      // <clusterId#objId or NOISE#objId , STObj>
       JavaPairRDD<String, STObj> localClusteredRDD = shuffledPairRDD.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
         Map<String, STObj> toBeUpdated;
@@ -219,10 +229,9 @@ public class TweetsStreamImporter {
       });
 
       //==================================================
-      union.unpersist();
 //      localClusteredRDD.persist(StorageLevel.MEMORY_ONLY());
 
-      // Fork 1 <internelId, List<stobj>>
+      // Fork 1 <objId, List<stobj>> only non-noise data
       JavaPairRDD<String, ArrayList<STObj>> objId_STObj_pair = localClusteredRDD.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
         String[] ids = tuple._1.split("#");
@@ -245,7 +254,7 @@ public class TweetsStreamImporter {
         STObj core = null;
         HashSet<String> set = new HashSet<>();
         for (STObj stObj : stObjs) {
-          assert(tuple._1.equals(stObj.getObjId()));
+          assert (tuple._1.equals(stObj.getObjId()));
           set.add(stObj.getClusterID());
           if (stObj.getClusterLabel() != null && stObj.getClusterLabel().equals(STObj.LABEL_CORE)) {
             core = stObj;
@@ -271,22 +280,135 @@ public class TweetsStreamImporter {
         return result.iterator();
       });
 
-      JavaPairRDD<String, String> tmp = from_to_ClusterIdPair.reduceByKey((t1, t2) -> {
-        HashSet<String> set = t1._1;
-        set.addAll(t2._1);
-        return new Tuple2<>(set, t1._2);
-      }).mapToPair(tuple -> {
-        SortedSet<String> set = new TreeSet<>(tuple._2._1);
-        String key = Joiner.on("#").join(set.iterator());
-//        HashSet<String> set = tuple._2._1;
-        String toClusterId = tuple._2._2;
-        return new Tuple2<>(key, toClusterId);
-      }).reduceByKey((id1, id2) -> id1);
+      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.mapToPair(tuple -> {
+        return new Tuple2<>(tuple._2._1, tuple._2._2);
+      }).distinct();
 
-      tmp.collectAsMap()
-        .forEach((set, id) -> {
-          System.out.println(set + " : " + id);
+      ArrayList<Tuple2<HashSet<String>, String>> set_list = Lists.newArrayList(tmp.collect());
+      HashMap<String, String> newMap = new HashMap<>();
+      while (set_list.size() > 0) {
+        Tuple2<HashSet<String>, String> seed = set_list.remove(0);
+        HashSet<String> seed_set = seed._1;
+        String seed_id = seed._2;
+        Iterator<Tuple2<HashSet<String>, String>> itr = set_list.iterator();
+        ArrayList<Tuple2<HashSet<String>, String>> toRemove = new ArrayList<>();
+        while (itr.hasNext()) {
+          Tuple2<HashSet<String>, String> candidate = itr.next();
+          HashSet<String> candidate_set = candidate._1;
+          Set<String> intersection = new HashSet<>(candidate_set);
+          intersection.retainAll(seed_set);
+          if (intersection.size() > 0) {
+            seed_set.addAll(candidate_set);
+            toRemove.add(candidate);
+          }
+        }
+        seed_set.forEach(oldId -> {
+          newMap.put(oldId, seed_id);
         });
+        set_list.removeAll(toRemove);
+      }
+
+
+      Broadcast<HashMap<String, String>> b_mergeMap = ssc.sparkContext().broadcast(newMap);
+
+      // Fork 2 <STObj>
+      JavaPairRDD<String, STObj> resultMap = localClusteredRDD.flatMapToPair(tuple -> {
+        ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
+        String objId = tuple._1.split("#")[1];
+        result.add(new Tuple2<>(objId, tuple._2));
+        return result.iterator();
+      }).aggregateByKey(new ArrayList<STObj>(), (list, stObj) -> {
+        list.add(stObj);
+        return list;
+      }, (list1, list2) -> {
+        list1.addAll(list2);
+        return list1;
+      }).mapToPair(tuple -> {
+        ArrayList<STObj> stObjs = tuple._2;
+        STObj resultPoint = null;
+        // find a core for this point
+        STObj core = null;
+        for (STObj stObj : stObjs) {
+          if (stObj.getClusterLabel() != null && stObj.getClusterLabel().equals(STObj.LABEL_CORE)) {
+            core = stObj;
+            break;
+          }
+        }
+        // if the labels of this point are all Borders, check the number of these labels
+        if (core == null && stObjs.size() > minPts) {
+          // elect a new core if the number of labels > minPts
+          core = stObjs.get(0);
+          core.setClusterLabel(STObj.LABEL_CORE);
+        }
+        // Means this point are Border of very limit number of clusters(<minPts), then a merge is not needed.
+        if (core == null) {
+          //TODO should multiple cluster IDs be added to the same Border Point?
+          resultPoint = stObjs.get(0);
+        } else
+          resultPoint = core;
+
+        String toClusterId = b_mergeMap.getValue().get(resultPoint.getClusterID());
+        if (toClusterId != null)
+          resultPoint.setClusterID(toClusterId);
+        return new Tuple2<>(resultPoint.getObjId(), resultPoint);
+      });
+
+
+      JavaRDD<STObj> finalRDD = union.union(resultMap).reduceByKey((stObj1, stObj2) -> {
+        if (stObj1.getClusterID() != null)
+          return stObj1;
+        else
+          return stObj2;
+      }).map(t -> {
+        return t._2;
+      });
+
+      JavaRDD<SimpleFeature> finalSFRDD = finalRDD.map(stObj->{
+        SimpleFeature sf = stObj.getFeature();
+        sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
+        sf.setAttribute(TweetsFeatureFactory.CLUSTER_ID, stObj.getClusterID());
+        sf.setAttribute(TweetsFeatureFactory.CLUSTER_LABEL, stObj.getClusterLabel());
+        return sf;
+      });
+      FeatureRDDToGeoMesa.save(options, finalSFRDD, ssc.sparkContext());
+
+//      System.out.println(finalRDD.count());
+
+//      finalMap.collect().forEach(tuple2->{
+//        System.out.println(tuple2._1 + " : " + tuple2._2.getClusterID() + " : " + tuple2._2.getClusterLabel());
+//      });
+//      newMap.forEach((set, id)->{
+//        System.out.println(Joiner.on("#").join(set) + " : " + id);
+//      });
+
+
+//      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.reduceByKey((t1, t2) -> {
+//        HashSet<String> set = t1._1;
+//        set.addAll(t2._1);
+//        return new Tuple2<>(set, t1._2);
+//      }).flatMapToPair(tuple -> {
+//        ArrayList<Tuple2<String, Tuple2<HashSet<String>, String>>> result = new ArrayList<>();
+//        HashSet<String> set = tuple._2._1;
+//        String toClusterId = tuple._2._2;
+//        set.forEach(clusterId->{
+//          result.add(new Tuple2<>(clusterId, new Tuple2<>(set, toClusterId)));
+//        });
+//        return result.iterator();
+//      }).reduceByKey((t1, t2) -> {
+//        HashSet<String> set = t1._1;
+//        set.addAll(t2._1);
+//        return new Tuple2<>(set, t1._2);
+//      }).mapToPair(tuple ->{
+//        HashSet<String> set = tuple._2._1;
+//        String toCId = tuple._2._2;
+//        return new Tuple2<>(set, toCId);
+//      }).distinct();
+
+//      tmp.collect().forEach(t->{
+//        HashSet<String> set = t._1;
+//        String toCId = t._2;
+//        System.out.println(Joiner.on("#").join(set) + " : " + toCId);
+//      });
 
 //      from_to_ClusterIdPair.collectAsMap().forEach((id, tuple)->{
 //        Set<String> set = tuple._1;

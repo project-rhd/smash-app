@@ -113,6 +113,7 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
 
   public static Map<String, STObj> localDBSCAN(Iterable<STObj> stObjItrFac, Double epsilon, Double spatioTemp_ratio, Long minPts) {
     Map<String, STObj> toBeUpdated = new HashMap<>();
+    Map<String, STObj> Resource = new HashMap<>();
     ArrayList<STObj> localPointList = Lists.newArrayList(stObjItrFac.iterator());
     stObjItrFac.iterator().forEachRemaining(stObj -> {
       // For each un-flagged non-cluster point
