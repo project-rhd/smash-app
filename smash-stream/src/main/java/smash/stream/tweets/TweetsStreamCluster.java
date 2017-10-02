@@ -1,15 +1,10 @@
 package smash.stream.tweets;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.gson.JsonSyntaxException;
 import com.vividsolutions.jts.geom.Envelope;
 import kafka.serializer.StringDecoder;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.broadcast.Broadcast;
@@ -18,22 +13,16 @@ import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
-import org.calrissian.mango.domain.Tuple;
-import org.geotools.data.Join;
-import org.geotools.factory.Hints;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.joda.time.DateTime;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
-import org.locationtech.geomesa.utils.csv.DMS;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
-import scala.tools.cmd.gen.AnyVals;
-import scala.tools.util.Javap;
 import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.data.tweets.pojo.Tweet;
 import smash.utils.JobTimer;
@@ -41,8 +30,6 @@ import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.geomesa.GeoMesaWriter;
 import smash.utils.geomesa.GeoMesaOptions;
 import smash.utils.spark.FeatureRDDToGeoMesa;
-import smash.utils.streamTasks.StreamTaskWriter;
-import smash.utils.streamTasks.ingest.SFIngestTask;
 import smash.utils.streamTasks.ml.spatioTemporal.CellsPartitioner;
 import smash.utils.streamTasks.ml.spatioTemporal.ClusterCell;
 import smash.utils.streamTasks.ml.spatioTemporal.DbscanTask;
@@ -55,15 +42,15 @@ import java.util.*;
  * @author Yikai Gong
  */
 
-public class TweetsStreamImporter {
-  private static Logger logger = LoggerFactory.getLogger(TweetsStreamImporter.class);
+public class TweetsStreamCluster {
+  private static Logger logger = LoggerFactory.getLogger(TweetsStreamCluster.class);
   private SparkConf sparkConf;
 
   public static void main(String[] args)
     throws IllegalAccessException, CmdLineException, NoSuchFieldException {
     GeoMesaOptions options = new GeoMesaOptions();
     options.parse(args);
-    TweetsStreamImporter importer = new TweetsStreamImporter();
+    TweetsStreamCluster importer = new TweetsStreamCluster();
     JobTimer.print(() -> {
       importer.run(options);
       return null;
@@ -71,7 +58,7 @@ public class TweetsStreamImporter {
     System.exit(0);
   }
 
-  public TweetsStreamImporter(SparkConf sparkConf) {
+  public TweetsStreamCluster(SparkConf sparkConf) {
     this.sparkConf = sparkConf;
     sparkConf.setAppName(this.getClass().getSimpleName());
     sparkConf.set("spark.files.maxPartitionBytes", "33554432"); // 32MB
@@ -81,7 +68,7 @@ public class TweetsStreamImporter {
     this.sparkConf.registerKryoClasses(classes);
   }
 
-  public TweetsStreamImporter() {
+  public TweetsStreamCluster() {
     this(new SparkConf());
   }
 
@@ -91,7 +78,7 @@ public class TweetsStreamImporter {
     Map<String, String> kafkaParams = new HashMap<>();
     Set<String> topicsSet = new HashSet<>();
     kafkaParams.put("metadata.broker.list", "scats-1-interface:9092");
-//    kafkaParams.put("auto.offset.reset", "smallest");
+    kafkaParams.put("auto.offset.reset", "smallest");
     topicsSet.add("tweets");
 
 
@@ -176,7 +163,7 @@ public class TweetsStreamImporter {
 //      System.out.println("itr size: " + hisSize);      //todo remove
 
       ArrayList<STObj> historyDataList = new ArrayList<>();
-      sfItr.forEachRemaining(sf->{
+      sfItr.forEachRemaining(sf -> {
         String tweetId = TweetsFeatureFactory.getObjId(sf);
         if (tweetId != null) {
           Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
@@ -191,7 +178,7 @@ public class TweetsStreamImporter {
       JavaPairRDD<String, STObj> historyRDD = ssc.sparkContext()
         .parallelize(historyDataList).flatMapToPair(stObj -> {
           List<Tuple2<String, STObj>> flatted = new ArrayList<>();
-          if (stObj!=null && stObj.getObjId()!=null)
+          if (stObj != null && stObj.getObjId() != null)
             flatted.add(new Tuple2<>(stObj.getObjId(), stObj));
           return flatted.iterator();
         });
@@ -261,8 +248,8 @@ public class TweetsStreamImporter {
         return list1;
       });
 
-      JavaPairRDD<String, Tuple2<HashSet<String>, String>> from_to_ClusterIdPair = objId_STObj_pair.flatMapToPair(tuple -> {
-        ArrayList<Tuple2<String, Tuple2<HashSet<String>, String>>> result = new ArrayList<>();
+      JavaPairRDD<HashSet<String>, String> from_to_ClusterIdPair = objId_STObj_pair.flatMapToPair(tuple -> {
+        ArrayList<Tuple2<HashSet<String>, String>> result = new ArrayList<>();
         ArrayList<STObj> stObjs = tuple._2;
         // find a core for this point
         STObj core = null;
@@ -282,10 +269,10 @@ public class TweetsStreamImporter {
         }
         // Now we find or elect a core for this point, point all clusterID to this its od
         if (core != null) {
-          for (String id : set) {
-            //            String key = stObj.getClusterID();
-            result.add(new Tuple2<>(id, new Tuple2<>(set, core.getClusterID())));
-          }
+//          for (String id : set) {
+          //            String key = stObj.getClusterID();
+          result.add(new Tuple2<>(set, core.getClusterID()));
+//          }
         }
         // Means this point are Border of very limit number of clusters(<minPts), then a merge is not needed.
         else {
@@ -294,11 +281,11 @@ public class TweetsStreamImporter {
         return result.iterator();
       });
 
-      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.mapToPair(tuple -> {
-        return new Tuple2<>(tuple._2._1, tuple._2._2);
-      }).distinct();
+//      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.mapToPair(tuple -> {
+//        return new Tuple2<>(tuple._2._1, tuple._2._2);
+//      }).distinct();
 
-      ArrayList<Tuple2<HashSet<String>, String>> set_list = Lists.newArrayList(tmp.collect());
+      ArrayList<Tuple2<HashSet<String>, String>> set_list = Lists.newArrayList(from_to_ClusterIdPair.collect());
       HashMap<String, String> newMap = new HashMap<>();
       while (set_list.size() > 0) {
         Tuple2<HashSet<String>, String> seed = set_list.remove(0);
@@ -387,7 +374,7 @@ public class TweetsStreamImporter {
         return sf;
       });
       FeatureRDDToGeoMesa.save(options, finalSFRDD, ssc.sparkContext());
-
+      FeatureRDDToGeoMesa.closeFeatureWriterOnSparkExecutors(ssc.sparkContext());
 
 //      System.out.println(finalRDD.count());
 

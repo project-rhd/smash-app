@@ -58,7 +58,7 @@ ${client_spark_home}/bin/spark-submit \
 --driver-memory 4G \
 --executor-memory 4G \
 --conf spark.eventLog.enabled=true \
---class "smash.stream.tweets.TweetsStreamImporter" \
+--class "smash.stream.tweets.TweetsStreamCluster" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
 --zookeepers ${zookeepers} \

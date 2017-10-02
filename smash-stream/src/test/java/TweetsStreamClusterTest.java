@@ -1,27 +1,16 @@
 
 
-import kafka.serializer.StringDecoder;
 import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.api.java.JavaPairInputDStream;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kafka.KafkaUtils;
 import org.kohsuke.args4j.CmdLineException;
-import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
-import smash.stream.tweets.TweetsStreamImporter;
+import smash.stream.tweets.TweetsStreamCluster;
 import smash.utils.JobTimer;
 import smash.utils.geomesa.GeoMesaOptions;
-
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * @author Yikai Gong
  */
 
-public class TweetsStreamImporterTest {
+public class TweetsStreamClusterTest {
   private SparkConf sparkConf;
 
   public static void main(String[] args)
@@ -35,7 +24,7 @@ public class TweetsStreamImporterTest {
     options.zookeepers = "scats-1-master:2181";
     options.overwrite = true;
     SparkConf conf = new SparkConf().setMaster("local[2]");
-    TweetsStreamImporter importer = new TweetsStreamImporter(conf);
+    TweetsStreamCluster importer = new TweetsStreamCluster(conf);
 
     JobTimer.print(() -> {
       importer.run(options);
