@@ -54,13 +54,10 @@ ${client_spark_home}/bin/spark-submit \
 --verbose \
 --deploy-mode cluster \
 --master spark://${spark_master_address}:6066 \
---total-executor-cores 4 \
+--total-executor-cores 6 \
 --driver-memory 4G \
 --executor-memory 4G \
 --conf spark.eventLog.enabled=true \
---jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
---conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
---conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
 --class "smash.stream.tweets.TweetsStreamImporter" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
@@ -82,5 +79,6 @@ echo "Task submitted. Check" http://${spark_master_address}:8080 "for details."
 
 
 
-#--conf "spark.driver.userClassPathFirst=true" \
-#--conf "spark.executor.userClassPathFirst=true" \
+#--jars ${hdfs_root}/lib/stanford-corenlp-3.7.0-models.jar \
+#--conf "spark.driver.extraClassPath=stanford-corenlp-3.7.0-models.jar" \
+#--conf "spark.executor.extraClassPath=stanford-corenlp-3.7.0-models.jar" \

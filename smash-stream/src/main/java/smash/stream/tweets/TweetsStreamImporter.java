@@ -91,7 +91,7 @@ public class TweetsStreamImporter {
     Map<String, String> kafkaParams = new HashMap<>();
     Set<String> topicsSet = new HashSet<>();
     kafkaParams.put("metadata.broker.list", "scats-1-interface:9092");
-    kafkaParams.put("auto.offset.reset", "smallest");
+//    kafkaParams.put("auto.offset.reset", "smallest");
     topicsSet.add("tweets");
 
 
@@ -100,6 +100,7 @@ public class TweetsStreamImporter {
 
     // Step 2. Create SparkStreaming context and define the operations.
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
+
     JavaPairInputDStream<String, String> directKafkaStream =
       KafkaUtils.createDirectStream(
         ssc,
@@ -111,6 +112,8 @@ public class TweetsStreamImporter {
     // For each data pair in stream: tuple[_1, _2]
     directKafkaStream.toJavaDStream().foreachRDD(tickRDD -> {
       // Block for each tick - Running in streaming-job-executor-0 process (The Driver)
+//      if (tickRDD.isEmpty())
+//        return;
       //todo read next clusterID from DB before accepting the data stream
       Long nxtCluId = 0L;
       // Min number of points to form a cluster
@@ -124,6 +127,7 @@ public class TweetsStreamImporter {
 //      Envelope bbox = new Envelope(144.6240369, 145.317, -38.03535, -37.57470703);
       Envelope bbox = new Envelope(144.624, 145.624, -38.03535, -37.03535);
 
+      // TODO may not need to parse into SimpleFeature before creating STObj
       // Phase-1: Use STObj as the generic object for social media points
       JavaPairRDD<String, STObj> incomeRDD = tickRDD.distinct().flatMapToPair(tuple -> {
         List<Tuple2<String, STObj>> flatted = new ArrayList<>();
@@ -132,7 +136,7 @@ public class TweetsStreamImporter {
           if (t != null && t.getCoordinates() != null) {
             SimpleFeature sf = TweetsFeatureFactory.createFeature(t);
             Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
-            STObj stObj = new STObj(sf, ts, null, null);
+            STObj stObj = new STObj(sf, ts, null, null, t.toJSON());
             flatted.add(new Tuple2<>(stObj.getObjId(), stObj));
           }
         } catch (JsonSyntaxException ignored) {
@@ -141,7 +145,8 @@ public class TweetsStreamImporter {
         return flatted.iterator();
       });
       if (incomeRDD.isEmpty()) return;
-//      System.out.println("incomeSize: " + incomeRDD.count());
+      //      System.out.println("incomeSize: " + incomeRDD.count());
+
 
       // Phase-2: Get earliest timestamp of the data in this tick
       Tuple2<String, STObj> min = incomeRDD.reduce((t1, t2) -> {
@@ -166,19 +171,28 @@ public class TweetsStreamImporter {
       GeoMesaWriter writer =
         GeoMesaWriter.getThreadSingleton(options, TweetsFeatureFactory.FT_NAME);
       Iterator<SimpleFeature> sfItr = writer.read(filter);
-      Long hisSize = Integer.valueOf(Iterators.size(sfItr)).longValue();
-      System.out.println("itr size: " + hisSize);      //todo remove
+
+//      Long hisSize = Integer.valueOf(Iterators.size(sfItr)).longValue();
+//      System.out.println("itr size: " + hisSize);      //todo remove
+
+      ArrayList<STObj> historyDataList = new ArrayList<>();
+      sfItr.forEachRemaining(sf->{
+        String tweetId = TweetsFeatureFactory.getObjId(sf);
+        if (tweetId != null) {
+          Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
+          String clusterId = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID);
+          String clusterLabel = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_LABEL);
+          Tweet tweet = TweetsFeatureFactory.fromSFtoPojo(sf);
+          STObj stObj = new STObj(sf, ts, clusterId, clusterLabel, tweet.toJSON());
+          historyDataList.add(stObj);
+        }
+      });
+
       JavaPairRDD<String, STObj> historyRDD = ssc.sparkContext()
-        .parallelize(Lists.newArrayList(sfItr)).flatMapToPair(sf -> {
+        .parallelize(historyDataList).flatMapToPair(stObj -> {
           List<Tuple2<String, STObj>> flatted = new ArrayList<>();
-          String tweetId = TweetsFeatureFactory.getObjId(sf);
-          if (tweetId != null) {
-            Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
-            String clusterId = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID);
-            String clusterLabel = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_LABEL);
-            STObj stObj = new STObj(sf, ts, clusterId, clusterLabel);
-            flatted.add(new Tuple2<>(sf.getID(), stObj));
-          }
+          if (stObj!=null && stObj.getObjId()!=null)
+            flatted.add(new Tuple2<>(stObj.getObjId(), stObj));
           return flatted.iterator();
         });
 
@@ -229,7 +243,7 @@ public class TweetsStreamImporter {
       });
 
       //==================================================
-//      localClusteredRDD.persist(StorageLevel.MEMORY_ONLY());
+      //      localClusteredRDD.persist(StorageLevel.MEMORY_ONLY());
 
       // Fork 1 <objId, List<stobj>> only non-noise data
       JavaPairRDD<String, ArrayList<STObj>> objId_STObj_pair = localClusteredRDD.flatMapToPair(tuple -> {
@@ -269,7 +283,7 @@ public class TweetsStreamImporter {
         // Now we find or elect a core for this point, point all clusterID to this its od
         if (core != null) {
           for (String id : set) {
-//            String key = stObj.getClusterID();
+            //            String key = stObj.getClusterID();
             result.add(new Tuple2<>(id, new Tuple2<>(set, core.getClusterID())));
           }
         }
@@ -363,14 +377,17 @@ public class TweetsStreamImporter {
         return t._2;
       });
 
-      JavaRDD<SimpleFeature> finalSFRDD = finalRDD.map(stObj->{
-        SimpleFeature sf = stObj.getFeature();
-        sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
+      JavaRDD<SimpleFeature> finalSFRDD = finalRDD.map(stObj -> {
+//        System.out.println(stObj.getJson());
+        Tweet tweet = Tweet.fromJSON(stObj.getJson());
+        SimpleFeature sf = TweetsFeatureFactory.createFeature(tweet);
+//        sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_ID, stObj.getClusterID());
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_LABEL, stObj.getClusterLabel());
         return sf;
       });
       FeatureRDDToGeoMesa.save(options, finalSFRDD, ssc.sparkContext());
+
 
 //      System.out.println(finalRDD.count());
 

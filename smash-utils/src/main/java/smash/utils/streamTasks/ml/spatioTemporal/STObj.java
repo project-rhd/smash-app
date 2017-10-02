@@ -22,19 +22,29 @@ public class STObj implements Serializable {
   private Vector<Double> coordinates;
   private String clusterID;
   private String clusterLabel;
-  private SimpleFeature feature;
+//  private SimpleFeature feature;
+  private String json;
 
-  private Integer partitionId;
-
-  public STObj(SimpleFeature feature, Date timestamp, String clusterID, String clusterLabel) {
+  public STObj(SimpleFeature feature, Date timestamp, String clusterID, String clusterLabel, String json) {
     assert (feature != null && timestamp != null);
-    this.feature = feature;
+//    this.feature = feature;
     this.timestamp = timestamp;
     objId = feature.getID();
     coordinates = new Vector<>();
     Point geo = (Point) feature.getDefaultGeometry();
     coordinates.add(0, geo.getX());
     coordinates.add(1, geo.getY());
+
+    this.json = json;
+  }
+
+  public STObj(String objId, Vector<Double> coordinates, Date timestamp, String clusterID, String clusterLabel, String json) {
+    this.objId = objId;
+    this.coordinates = coordinates;
+    this.timestamp = timestamp;
+    this.clusterID = clusterID;
+    this.clusterLabel = clusterLabel;
+    this.json = json;
   }
 
   public double getDistanceTo(STObj target, Double spatioTemp_ratio) {
@@ -82,9 +92,9 @@ public class STObj implements Serializable {
     return clusterLabel;
   }
 
-  public SimpleFeature getFeature() {
-    return feature;
-  }
+//  public SimpleFeature getFeature() {
+//    return feature;
+//  }
 
   // Set
   public void setCoordinates(Vector<Double> coordinates) {
@@ -99,8 +109,16 @@ public class STObj implements Serializable {
     this.clusterLabel = clusterLabel;
   }
 
+  public String getJson() {
+    return json;
+  }
+
+//  public void setJson(String json) {
+//    this.json = json;
+//  }
 
   protected STObj clone(){
-    return new STObj(this.feature, this.timestamp, this.clusterID, this.clusterLabel);
+//    return new STObj(this.feature, this.timestamp, this.clusterID, this.clusterLabel);
+    return new STObj(objId, coordinates, timestamp, clusterID, clusterLabel, json);
   }
 }

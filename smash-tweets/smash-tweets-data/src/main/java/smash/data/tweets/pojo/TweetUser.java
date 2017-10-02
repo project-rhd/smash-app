@@ -17,6 +17,10 @@ public class TweetUser implements Serializable {
   public TweetUser() {
   }
 
+  public TweetUser(String screen_name) {
+    this.screen_name = screen_name;
+  }
+
   public String getScreen_name() {
     return screen_name;
   }

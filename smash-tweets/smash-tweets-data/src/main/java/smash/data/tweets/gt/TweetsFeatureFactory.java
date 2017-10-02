@@ -1,6 +1,7 @@
 package smash.data.tweets.gt;
 
 import com.google.common.base.Joiner;
+import com.google.gson.reflect.TypeToken;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
@@ -13,7 +14,9 @@ import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import smash.data.tweets.pojo.Tweet;
 import smash.data.tweets.pojo.TweetCoordinates;
+import smash.data.tweets.pojo.TweetUser;
 
+import java.lang.reflect.Type;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -94,14 +97,24 @@ public class TweetsFeatureFactory {
     Tweet t = new Tweet();
     String[] fid = sf.getID().split("-");
     if (!fid[0].equals("tweet")) return null;
+    Double lon = ((Point) sf.getDefaultGeometry()).getX();
+    Double lat = ((Point) sf.getDefaultGeometry()).getY();
+    DateFormat df = new SimpleDateFormat(timeFormat);
+    Date date = (Date)sf.getAttribute(CREATED_AT);
+    df.format(date);
+
     t.setId_str(fid[1]);
-    Double lon = ((Point)sf.getDefaultGeometry()).getX();
-    Double lat = ((Point)sf.getDefaultGeometry()).getY();
+    t.setCreated_at(df.format(date));
+    t.setText((String) sf.getAttribute(TEXT));
     t.setCoordinates(new TweetCoordinates(lon, lat));
+    t.setUser(new TweetUser((String) sf.getAttribute(SCREEN_NAME)));
+    Type listType = new TypeToken<ArrayList<String>>() {}.getType();
+    t.setTokens(Tweet.gson.fromJson((String) sf.getAttribute(TOKENS), listType));
+    t.setSentiment((Integer) sf.getAttribute(SENTIMENT));
     return t;
   }
 
-  public static String getObjId(SimpleFeature sf){
+  public static String getObjId(SimpleFeature sf) {
     String[] fid = sf.getID().split("-");
     if (!fid[0].equals("tweet")) return null;
     return fid[1];

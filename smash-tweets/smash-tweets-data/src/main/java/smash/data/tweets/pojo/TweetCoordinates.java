@@ -25,6 +25,7 @@ public class TweetCoordinates implements Serializable {
     List<BigDecimal> l = new ArrayList<>();
     l.add(0, BigDecimal.valueOf(lon));
     l.add(1, BigDecimal.valueOf(lat));
+    coordinates = l;
   }
 
   public String getType() {
