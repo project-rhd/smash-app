@@ -59,7 +59,7 @@ public class DataStreamGenerator {
           System.out.println(key);
           producer.send(new ProducerRecord<>("tweets", key, tweetStr));
           try {
-            Thread.sleep(100l);
+            Thread.sleep(10l);
           } catch (InterruptedException e) {
             e.printStackTrace();
           }

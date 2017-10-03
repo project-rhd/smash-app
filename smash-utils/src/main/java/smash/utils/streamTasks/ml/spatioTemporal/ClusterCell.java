@@ -6,6 +6,7 @@ import com.vividsolutions.jts.geom.Envelope;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Vector;
 
 /**
@@ -14,11 +15,11 @@ import java.util.Vector;
 
 public class ClusterCell implements Serializable{
   private String cellId;
-  private ArrayList<Vector<Double>> points;
+  private ArrayList<Map.Entry<Vector<Double>, Boolean>> points;
   private Envelope bbx;
   private long finalSize = 0;
 
-  public ClusterCell(String cellId, List<Vector<Double>> points, Envelope bbx) {
+  public ClusterCell(String cellId, List<Map.Entry<Vector<Double>, Boolean>> points, Envelope bbx) {
     this.cellId = cellId;
     this.points = Lists.newArrayList(points.iterator());
     this.bbx = bbx;
@@ -28,7 +29,7 @@ public class ClusterCell implements Serializable{
     return cellId;
   }
 
-  public List<Vector<Double>> getPoints() {
+  public List<Map.Entry<Vector<Double>, Boolean>> getPoints() {
     return points;
   }
 
@@ -38,8 +39,8 @@ public class ClusterCell implements Serializable{
 
   public Double getBbxSize() {
     assert (bbx != null);
-    Double delta_x = Math.abs(points.get(0).get(0) - points.get(1).get(0));
-    Double delta_y = Math.abs(points.get(0).get(1) - points.get(1).get(1));
+    Double delta_x = bbx.getMaxX() - bbx.getMinX();
+    Double delta_y = bbx.getMaxY() - bbx.getMinY();
     return Math.min(delta_x, delta_y);
   }
 
@@ -55,5 +56,17 @@ public class ClusterCell implements Serializable{
 
   public long getFinalSize() {
     return finalSize;
+  }
+
+  public Boolean containsNewPoint(){
+    Boolean containsNesPoint = false;
+    for (Map.Entry<Vector<Double>, Boolean> point: points){
+      assert (point.getValue() != null);
+      if (point.getValue()){
+        containsNesPoint = true;
+        break;
+      }
+    }
+    return containsNesPoint;
   }
 }

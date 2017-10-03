@@ -1,6 +1,7 @@
 package smash.utils.streamTasks.ml.spatioTemporal;
 
 import com.vividsolutions.jts.geom.Envelope;
+import org.apache.arrow.flatbuf.Bool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,12 +42,17 @@ public class CellsPartitioner implements Serializable {
 
   private void divideOrSave(ClusterCell inCell) {
     // Drop cells with too little points
-    if (inCell.getPtsSize() < minPts)
+    System.out.println("cell bbx size: " + inCell.getBbxSize());
+    System.out.println("min bbx size: " + minBbxSize);
+    if (inCell.getPtsSize() < minPts){
       return;
+    }
+//    if(!inCell.containsNewPoint())
+//      return;
       // Continue divide into 4 seb-cells
     else if (inCell.getPtsSize() > maxPts && inCell.getBbxSize() > 1 * minBbxSize) {
       String cellId = inCell.getCellId();
-      List<Vector<Double>> points = inCell.getPoints();
+      List<Map.Entry<Vector<Double>, Boolean>> points = inCell.getPoints();
       Envelope envelope = inCell.getBbx();
       double min_x = envelope.getMinX();
       double max_x = envelope.getMaxX();
@@ -61,11 +67,11 @@ public class CellsPartitioner implements Serializable {
         else if (i == 1) newEnlp = new Envelope(mid_x, max_x, min_y, mid_y);
         else if (i == 2) newEnlp = new Envelope(mid_x, max_x, mid_y, max_y);
         else newEnlp = new Envelope(min_x, mid_x, mid_y, max_y);
-        List<Vector<Double>> newPoints = new ArrayList<>();
-        List<Vector<Double>> leftPoints = new ArrayList<>();
+        List<Map.Entry<Vector<Double>, Boolean>> newPoints = new ArrayList<>();
+        List<Map.Entry<Vector<Double>, Boolean>> leftPoints = new ArrayList<>();
         for(int j = 0; j < points.size(); j++) {
-          Vector<Double> point = points.remove(j);
-          if (newEnlp.contains(point.get(0), point.get(1)))
+          Map.Entry<Vector<Double>, Boolean> point = points.remove(j);
+          if (newEnlp.contains(point.getKey().get(0), point.getKey().get(1)))
             newPoints.add(point);
           else
             leftPoints.add(point);

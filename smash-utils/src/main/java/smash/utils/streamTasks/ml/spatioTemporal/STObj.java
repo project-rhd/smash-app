@@ -22,6 +22,7 @@ public class STObj implements Serializable {
   private Vector<Double> coordinates;
   private String clusterID;
   private String clusterLabel;
+  private Boolean newInput = true;
 //  private SimpleFeature feature;
   private String json;
 
@@ -92,7 +93,12 @@ public class STObj implements Serializable {
     return clusterLabel;
   }
 
-//  public SimpleFeature getFeature() {
+  public Boolean isNewInput() {
+    return newInput;
+  }
+
+
+  //  public SimpleFeature getFeature() {
 //    return feature;
 //  }
 
@@ -113,7 +119,11 @@ public class STObj implements Serializable {
     return json;
   }
 
-//  public void setJson(String json) {
+  public void setNewInput(Boolean newInput) {
+    this.newInput = newInput;
+  }
+
+  //  public void setJson(String json) {
 //    this.json = json;
 //  }
 

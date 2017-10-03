@@ -2,6 +2,7 @@ package smash.stream.tweets;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.JsonSyntaxException;
 import com.vividsolutions.jts.geom.Envelope;
 import kafka.serializer.StringDecoder;
@@ -87,7 +88,7 @@ public class TweetsStreamCluster {
     GeoMesaDataUtils.saveFeatureType(options, TweetsFeatureFactory.SFT);
 
     // Step 2. Create SparkStreaming context and define the operations.
-    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(10));
 
     JavaPairInputDStream<String, String> directKafkaStream =
       KafkaUtils.createDirectStream(
@@ -146,10 +147,10 @@ public class TweetsStreamCluster {
 //      if (min == null) return;
 
       List<STObj> reducedBorderPoints = incomeRDD.aggregate(new ArrayList<STObj>(2), (list, t) -> {
-        if (list.isEmpty()){
+        if (list.isEmpty()) {
           list.add(0, t._2);
           list.add(1, t._2);
-        } else{
+        } else {
           if (t._2.getTimestamp().getTime() < list.get(0).getTimestamp().getTime())
             list.set(0, t._2);
           if (t._2.getTimestamp().getTime() > list.get(1).getTimestamp().getTime())
@@ -161,7 +162,7 @@ public class TweetsStreamCluster {
           return list2;
         else if (list2.isEmpty())
           return list1;
-        else{
+        else {
           if (list2.get(0).getTimestamp().getTime() < list1.get(0).getTimestamp().getTime())
             list1.set(0, list2.get(0));
           if (list2.get(1).getTimestamp().getTime() > list1.get(1).getTimestamp().getTime())
@@ -205,6 +206,7 @@ public class TweetsStreamCluster {
           String clusterLabel = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_LABEL);
           Tweet tweet = TweetsFeatureFactory.fromSFtoPojo(sf);
           STObj stObj = new STObj(sf, ts, clusterId, clusterLabel, tweet.toJSON());
+          stObj.setNewInput(false);
           historyDataList.add(stObj);
         }
       });
@@ -221,11 +223,19 @@ public class TweetsStreamCluster {
       JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> stObj1);
       //TODO Memory only could be better
       union.persist(StorageLevel.MEMORY_AND_DISK());
-      List<Vector<Double>> points = union.map(tuple -> tuple._2.getCoordinates()).collect();
+      List<Map.Entry<Vector<Double>, Boolean>> points = union.map(tuple -> Maps.immutableEntry(tuple._2.getCoordinates(), tuple._2.isNewInput())).collect();
       ClusterCell topCell = new ClusterCell("0", points, bbox);
       CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon);
       partitioner.doPartition();
       Map<String, ClusterCell> map = partitioner.getCellsMap();
+
+      map.forEach((id, clusterCell) -> {
+        System.out.println(id);
+        System.out.println(clusterCell.getPoints());
+        System.out.println(clusterCell.getFinalSize());
+        System.out.println(clusterCell.getBbx());
+        System.out.println("=============================");
+      });
 
       // Phase-4: Broadcast cells information. Shuffle data and do local DBSCAN
       Broadcast<Map<String, ClusterCell>> b_cellsMap = ssc.sparkContext().broadcast(map);
@@ -494,13 +504,6 @@ public class TweetsStreamCluster {
 //      });
 
 
-//      map.forEach((id, clusterCell) -> {
-//        System.out.println(id);
-//        System.out.println(clusterCell.getPoints());
-//        System.out.println(clusterCell.getFinalSize());
-//        System.out.println(clusterCell.getBbx());
-//        System.out.println("=============================");
-//      });
 //
 
 
