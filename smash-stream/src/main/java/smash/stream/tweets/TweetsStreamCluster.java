@@ -1,5 +1,6 @@
 package smash.stream.tweets;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonSyntaxException;
 import com.vividsolutions.jts.geom.Envelope;
@@ -101,7 +102,8 @@ public class TweetsStreamCluster {
       // Block for each tick - Running in streaming-job-executor-0 process (The Driver)
 //      if (tickRDD.isEmpty())
 //        return;
-      //todo read next clusterID from DB before accepting the data stream
+      //Todo read next clusterID from DB before accepting the data stream
+      //Todo Apply Datum?
       Long nxtCluId = 0L;
       // Min number of points to form a cluster
       Long minPts = 3L;
@@ -134,18 +136,49 @@ public class TweetsStreamCluster {
       if (incomeRDD.isEmpty()) return;
       //      System.out.println("incomeSize: " + incomeRDD.count());
 
-
       // Phase-2: Get earliest timestamp of the data in this tick
-      Tuple2<String, STObj> min = incomeRDD.reduce((t1, t2) -> {
-        Tuple2<String, STObj> smaller = t1;
-        if (t2._2.getTimestamp().getTime() < t1._2.getTimestamp().getTime())
-          smaller = t2;
-        return smaller;
+//      Tuple2<String, STObj> min = incomeRDD.reduce((t1, t2) -> {
+//        Tuple2<String, STObj> smaller = t1;
+//        if (t2._2.getTimestamp().getTime() < t1._2.getTimestamp().getTime())
+//          smaller = t2;
+//        return smaller;
+//      });
+//      if (min == null) return;
+
+      List<STObj> reducedBorderPoints = incomeRDD.aggregate(new ArrayList<STObj>(2), (list, t) -> {
+        if (list.isEmpty()){
+          list.add(0, t._2);
+          list.add(1, t._2);
+        } else{
+          if (t._2.getTimestamp().getTime() < list.get(0).getTimestamp().getTime())
+            list.set(0, t._2);
+          if (t._2.getTimestamp().getTime() > list.get(1).getTimestamp().getTime())
+            list.set(1, t._2);
+        }
+        return list;
+      }, (list1, list2) -> {
+        if (list1.isEmpty())
+          return list2;
+        else if (list2.isEmpty())
+          return list1;
+        else{
+          if (list2.get(0).getTimestamp().getTime() < list1.get(0).getTimestamp().getTime())
+            list1.set(0, list2.get(0));
+          if (list2.get(1).getTimestamp().getTime() > list1.get(1).getTimestamp().getTime())
+            list1.set(1, list2.get(1));
+          return list1;
+        }
       });
-      if (min == null) return;
+
+      if (reducedBorderPoints.size() < 2 || reducedBorderPoints.get(0) == null || reducedBorderPoints.get(1) == null)
+        return;
       // Query history data
-      Date queryEndTime = min._2().getTimestamp();
-      Date queryStartTime = new Date(queryEndTime.getTime() - covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1));
+      Long timeMinDis = covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1);
+      Date queryStartTime = new Date(reducedBorderPoints.get(0).getTimestamp().getTime() - timeMinDis);
+      Date queryEndTime = new Date(reducedBorderPoints.get(1).getTimestamp().getTime() + timeMinDis);
+//      System.out.println("Start: " + queryStartTime);
+//      System.out.println("End: " + queryEndTime);
+
       Filter filter = null;
       try {
         filter = CQL.toFilter("created_at DURING " +
@@ -161,6 +194,7 @@ public class TweetsStreamCluster {
 
 //      Long hisSize = Integer.valueOf(Iterators.size(sfItr)).longValue();
 //      System.out.println("itr size: " + hisSize);      //todo remove
+
 
       ArrayList<STObj> historyDataList = new ArrayList<>();
       sfItr.forEachRemaining(sf -> {
