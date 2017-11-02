@@ -2,6 +2,7 @@ package smash.utils.streamTasks.ml.spatioTemporal;
 
 import com.vividsolutions.jts.geom.Envelope;
 import org.apache.arrow.flatbuf.Bool;
+import org.geotools.geometry.jts.ReferencedEnvelope3D;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,11 +63,11 @@ public class CellsPartitioner implements Serializable {
       double mid_y = min_y + ((max_y - min_y) / 2.0);
       for (int i = 0; i < 4; i++) {
         String newCellId = cellId + String.valueOf(i);
-        Envelope newEnlp = null;
-        if (i == 0) newEnlp = new Envelope(min_x, mid_x, min_y, mid_y);
-        else if (i == 1) newEnlp = new Envelope(mid_x, max_x, min_y, mid_y);
-        else if (i == 2) newEnlp = new Envelope(mid_x, max_x, mid_y, max_y);
-        else newEnlp = new Envelope(min_x, mid_x, mid_y, max_y);
+        ReferencedEnvelope3D newEnlp = null;
+        if (i == 0) newEnlp = new ReferencedEnvelope3D(min_x, mid_x, min_y, mid_y, 0, 0, null);
+        else if (i == 1) newEnlp = new ReferencedEnvelope3D(mid_x, max_x, min_y, mid_y, 0, 0, null);
+        else if (i == 2) newEnlp = new ReferencedEnvelope3D(mid_x, max_x, mid_y, max_y, 0, 0, null);
+        else newEnlp = new ReferencedEnvelope3D(min_x, mid_x, mid_y, max_y, 0, 0, null);
         List<Map.Entry<Vector<Double>, Boolean>> newPoints = new ArrayList<>();
         List<Map.Entry<Vector<Double>, Boolean>> leftPoints = new ArrayList<>();
         for(int j = 0; j < points.size(); j++) {

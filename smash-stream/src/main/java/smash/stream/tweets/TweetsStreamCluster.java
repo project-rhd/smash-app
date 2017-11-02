@@ -17,6 +17,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
+import org.geotools.geometry.jts.ReferencedEnvelope3D;
 import org.joda.time.DateTime;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
@@ -115,7 +116,7 @@ public class TweetsStreamCluster {
       Double spatioTemp_ratio = 0.1D / 600000; // km/milli-sec
       Double epsilon = calculate_epsilon(dist_spatial, dist_time, spatioTemp_ratio);
 //      Envelope bbox = new Envelope(144.6240369, 145.317, -38.03535, -37.57470703);
-      Envelope bbox = new Envelope(144.624, 145.624, -38.03535, -37.03535);
+      ReferencedEnvelope3D bbox = new ReferencedEnvelope3D(144.624, 145.624, -38.03535, -37.03535, 0, 0, null);
 
       // TODO may not need to parse into SimpleFeature before creating STObj
       // Phase-1: Use STObj as the generic object for social media points
@@ -138,14 +139,6 @@ public class TweetsStreamCluster {
       //      System.out.println("incomeSize: " + incomeRDD.count());
 
       // Phase-2: Get earliest timestamp of the data in this tick
-//      Tuple2<String, STObj> min = incomeRDD.reduce((t1, t2) -> {
-//        Tuple2<String, STObj> smaller = t1;
-//        if (t2._2.getTimestamp().getTime() < t1._2.getTimestamp().getTime())
-//          smaller = t2;
-//        return smaller;
-//      });
-//      if (min == null) return;
-
       List<STObj> reducedBorderPoints = incomeRDD.aggregate(new ArrayList<STObj>(2), (list, t) -> {
         if (list.isEmpty()) {
           list.add(0, t._2);

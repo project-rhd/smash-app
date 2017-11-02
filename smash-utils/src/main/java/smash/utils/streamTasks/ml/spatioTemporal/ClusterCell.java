@@ -2,6 +2,7 @@ package smash.utils.streamTasks.ml.spatioTemporal;
 
 import com.google.common.collect.Lists;
 import com.vividsolutions.jts.geom.Envelope;
+import org.geotools.geometry.jts.ReferencedEnvelope3D;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -16,10 +17,10 @@ import java.util.Vector;
 public class ClusterCell implements Serializable{
   private String cellId;
   private ArrayList<Map.Entry<Vector<Double>, Boolean>> points;
-  private Envelope bbx;
+  private ReferencedEnvelope3D bbx;
   private long finalSize = 0;
 
-  public ClusterCell(String cellId, List<Map.Entry<Vector<Double>, Boolean>> points, Envelope bbx) {
+  public ClusterCell(String cellId, List<Map.Entry<Vector<Double>, Boolean>> points, ReferencedEnvelope3D bbx) {
     this.cellId = cellId;
     this.points = Lists.newArrayList(points.iterator());
     this.bbx = bbx;
