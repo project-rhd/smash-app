@@ -47,7 +47,7 @@ public class CellsPartitioner implements Serializable {
     if (inCell.getPtsSize() < minPts){
       return;
     }
-//    if(!inCell.containsNewPoint())
+//    if(!inCell.containsNewPoint())  /TODO filter cells contain no new input
 //      return;
       // Continue divide into 4 seb-cells
     else if (inCell.getPtsSize() > maxPts && inCell.getBbxSize() > 1 * minBbxSize) {

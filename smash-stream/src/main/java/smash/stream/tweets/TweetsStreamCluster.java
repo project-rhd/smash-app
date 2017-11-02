@@ -280,7 +280,7 @@ public class TweetsStreamCluster {
       JavaPairRDD<String, ArrayList<STObj>> objId_STObj_pair = localClusteredRDD.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
         String[] ids = tuple._1.split("#");
-        if (!ids.equals("NOISE")) {
+        if (!ids[0].equals("NOISE")) {
           result.add(new Tuple2<>(ids[1], tuple._2));
         }
         return result.iterator();

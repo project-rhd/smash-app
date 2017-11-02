@@ -142,12 +142,12 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
       nbList.forEach(nbStObj -> {
         // if the neighbour is an un-clustered point
         if (nbStObj.getClusterID() == null || nbStObj.getClusterID().equals("")) {
-          STObj duplicate = nbStObj.clone();
+          STObj duplicate = nbStObj.clone();  // TODO reconsider
           duplicate.setClusterID(newClusterId);
           duplicate.setClusterLabel(STObj.LABEL_BORDER);
           toBeUpdated.put(duplicate.getClusterID() + "#" + duplicate.getObjId(), duplicate);
           // expand - Inner self call
-          extendFromSeed(nbStObj, staticPointList, toBeUpdated, epsilon, spatioTemp_ratio, minPts);
+          extendFromSeed(nbStObj, staticPointList, toBeUpdated, epsilon, spatioTemp_ratio, minPts);  //TODO needs reconsider if this is needed or if clone is needed
         }
         // If the neighbour is a core of another cluster
         else if (nbStObj.getClusterLabel().equals(STObj.LABEL_CORE)) {
