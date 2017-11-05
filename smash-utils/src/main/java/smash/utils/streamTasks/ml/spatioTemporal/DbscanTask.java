@@ -174,4 +174,20 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
     }
 
   }
+
+
+  public static double get_STDistance_radian(Double sp_d_km, Long temp_d_milSec, Double spatioTemporalRatio) {
+    assert (sp_d_km != null && temp_d_milSec != null && spatioTemporalRatio != null);
+    double kms_per_radian_mel = 87.944d;
+    double d1 = sp_d_km;
+    double d2 = temp_d_milSec * spatioTemporalRatio;
+    return Math.sqrt((Math.pow(d1, 2) + Math.pow(d2, 2)) / Math.pow(kms_per_radian_mel, 2));
+  }
+
+  public static Long covertToTimeDiff(Double epsilon, Double spatioTemporalRatio) {
+    assert (epsilon != null && spatioTemporalRatio != null);
+    double kms_per_radian_mel = 87.944d;
+    return Math.round((epsilon * kms_per_radian_mel / spatioTemporalRatio) + 1);
+  }
+
 }

@@ -1,10 +1,8 @@
 package smash.stream.tweets;
 
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonSyntaxException;
-import com.vividsolutions.jts.geom.Envelope;
 import kafka.serializer.StringDecoder;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -114,9 +112,8 @@ public class TweetsStreamCluster {
       Long dist_time = 600000L; //10min in milli-sec
       Double dist_spatial = 0.1D; //0.1km
       Double spatioTemp_ratio = 0.1D / 600000; // km/milli-sec
-      Double epsilon = calculate_epsilon(dist_spatial, dist_time, spatioTemp_ratio);
+      Double epsilon = DbscanTask.get_STDistance_radian(dist_spatial, dist_time, spatioTemp_ratio);
 //      Envelope bbox = new Envelope(144.6240369, 145.317, -38.03535, -37.57470703);
-      ReferencedEnvelope3D bbox = new ReferencedEnvelope3D(144.624, 145.624, -38.03535, -37.03535, 0, 0, null);
 
       // TODO may not need to parse into SimpleFeature before creating STObj
       // Phase-1: Use STObj as the generic object for social media points
@@ -167,12 +164,11 @@ public class TweetsStreamCluster {
       if (reducedBorderPoints.size() < 2 || reducedBorderPoints.get(0) == null || reducedBorderPoints.get(1) == null)
         return;
       // Query history data
-      Long timeMinDis = covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1);
+      Long timeMinDis = DbscanTask.covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1);
       Date queryStartTime = new Date(reducedBorderPoints.get(0).getTimestamp().getTime() - timeMinDis);
       Date queryEndTime = new Date(reducedBorderPoints.get(1).getTimestamp().getTime() + timeMinDis);
-//      System.out.println("Start: " + queryStartTime);
-//      System.out.println("End: " + queryEndTime);
 
+      //TODO use spatialRDDProvider for reading data from geoMesa
       Filter filter = null;
       try {
         filter = CQL.toFilter("created_at DURING " +
@@ -185,11 +181,6 @@ public class TweetsStreamCluster {
       GeoMesaWriter writer =
         GeoMesaWriter.getThreadSingleton(options, TweetsFeatureFactory.FT_NAME);
       Iterator<SimpleFeature> sfItr = writer.read(filter);
-
-//      Long hisSize = Integer.valueOf(Iterators.size(sfItr)).longValue();
-//      System.out.println("itr size: " + hisSize);      //todo remove
-
-
       ArrayList<STObj> historyDataList = new ArrayList<>();
       sfItr.forEachRemaining(sf -> {
         String tweetId = TweetsFeatureFactory.getObjId(sf);
@@ -203,7 +194,6 @@ public class TweetsStreamCluster {
           historyDataList.add(stObj);
         }
       });
-
       JavaPairRDD<String, STObj> historyRDD = ssc.sparkContext()
         .parallelize(historyDataList).flatMapToPair(stObj -> {
           List<Tuple2<String, STObj>> flatted = new ArrayList<>();
@@ -216,9 +206,12 @@ public class TweetsStreamCluster {
       JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> stObj1);
       //TODO Memory only could be better
       union.persist(StorageLevel.MEMORY_AND_DISK());
-      List<Map.Entry<Vector<Double>, Boolean>> points = union.map(tuple -> Maps.immutableEntry(tuple._2.getCoordinates(), tuple._2.isNewInput())).collect();
-      ClusterCell topCell = new ClusterCell("0", points, bbox);
-      CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon);
+      List<Map.Entry<Vector<Double>, Boolean>> points = union.map(tuple -> Maps.immutableEntry(tuple._2.getSTVector(spatioTemp_ratio), tuple._2.isNewInput())).collect();
+      double min_t = DbscanTask.get_STDistance_radian(0d, queryStartTime.getTime(), spatioTemp_ratio);
+      double max_t = DbscanTask.get_STDistance_radian(0d, queryEndTime.getTime(), spatioTemp_ratio);
+      ReferencedEnvelope3D bbox = new ReferencedEnvelope3D(144.624, 145.624, -38.03535, -37.03535, min_t, max_t, null);
+      ClusterCell topCell = new ClusterCell("000", points, bbox);
+      CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon, spatioTemp_ratio);
       partitioner.doPartition();
       Map<String, ClusterCell> map = partitioner.getCellsMap();
 
@@ -230,16 +223,17 @@ public class TweetsStreamCluster {
         System.out.println("=============================");
       });
 
+
       // Phase-4: Broadcast cells information. Shuffle data and do local DBSCAN
       Broadcast<Map<String, ClusterCell>> b_cellsMap = ssc.sparkContext().broadcast(map);
       // <cellId or "NOISE", Iterable<STOjb>>
       JavaPairRDD<String, Iterable<STObj>> shuffledPairRDD = union.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
-        Vector<Double> coordinate = tuple._2.getCoordinates();
+        Vector<Double> coordinate = tuple._2.getSTVector(spatioTemp_ratio);
         Iterator<Map.Entry<String, ClusterCell>> cellItr = b_cellsMap.getValue().entrySet().iterator();
         while (cellItr.hasNext()) {
           Map.Entry<String, ClusterCell> entry = cellItr.next();
-          if (entry.getValue().getBbx().contains(coordinate.get(0), coordinate.get(1))) {
+          if (entry.getValue().getBbx().contains(coordinate.get(0), coordinate.get(1), coordinate.get(2))) {
             result.add(new Tuple2<>(entry.getValue().getCellId(), tuple._2));
             return result.iterator();
           }
@@ -570,17 +564,5 @@ public class TweetsStreamCluster {
   }
 
 
-  public static double calculate_epsilon(Double sp_d_km, Long temp_d_milSec, Double spatioTemporalRatio) {
-    assert (sp_d_km != null && temp_d_milSec != null && spatioTemporalRatio != null);
-    double kms_per_radian_mel = 87.944d;
-    double d1 = sp_d_km;
-    double d2 = temp_d_milSec * spatioTemporalRatio;
-    return Math.sqrt((Math.pow(d1, 2) + Math.pow(d2, 2)) / Math.pow(kms_per_radian_mel, 2));
-  }
 
-  public static Long covertToTimeDiff(Double epsilon, Double spatioTemporalRatio) {
-    assert (epsilon != null && spatioTemporalRatio != null);
-    double kms_per_radian_mel = 87.944d;
-    return Math.round((epsilon * kms_per_radian_mel / spatioTemporalRatio) + 1);
-  }
 }

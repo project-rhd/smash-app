@@ -34,7 +34,7 @@ public class ClusterCell implements Serializable{
     return points;
   }
 
-  public Envelope getBbx() {
+  public ReferencedEnvelope3D getBbx() {
     return bbx;
   }
 
@@ -42,7 +42,8 @@ public class ClusterCell implements Serializable{
     assert (bbx != null);
     Double delta_x = bbx.getMaxX() - bbx.getMinX();
     Double delta_y = bbx.getMaxY() - bbx.getMinY();
-    return Math.min(delta_x, delta_y);
+    Double delta_z = bbx.getMaxZ() - bbx.getMinZ();
+    return Math.max(delta_x, Math.max(delta_y, delta_z));
   }
 
   public int getPtsSize(){
@@ -58,6 +59,7 @@ public class ClusterCell implements Serializable{
   public long getFinalSize() {
     return finalSize;
   }
+
 
   public Boolean containsNewPoint(){
     Boolean containsNesPoint = false;

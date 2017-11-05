@@ -85,6 +85,15 @@ public class STObj implements Serializable {
     return coordinates;
   }
 
+  public Vector<Double> getSTVector(Double spatioTemp_ratio){
+    Vector<Double> v = new Vector<>();
+    v.add(0, coordinates.get(0));
+    v.add(1, coordinates.get(1));
+    double z = DbscanTask.get_STDistance_radian(0d, timestamp.getTime(), spatioTemp_ratio);
+    v.add(2,  z);
+    return v;
+  }
+
   public String getClusterID() {
     return clusterID;
   }
