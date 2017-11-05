@@ -25,15 +25,13 @@ public class CellsPartitioner implements Serializable {
   private Long maxPts = 100L;
   private Long minPts = 0L;
   private Double extendDist = 0D;
-  private Double spatioTemp_ratio;
 
-  public CellsPartitioner(ClusterCell topCell, Double minBbxSize, Long maxPts, Long minPts, Double extendDist, Double spatioTemp_ratio) {
+  public CellsPartitioner(ClusterCell topCell, Double minBbxSize, Long maxPts, Long minPts, Double extendDist) {
     this.minBbxSize = minBbxSize;
     this.maxPts = maxPts;
     this.minPts = minPts;
     this.topCells = topCell;
     this.extendDist = extendDist;
-    this.spatioTemp_ratio = spatioTemp_ratio;
     cellsMap = new HashMap<>();
   }
 
@@ -46,8 +44,8 @@ public class CellsPartitioner implements Serializable {
 
   private void divideOrSave(ClusterCell inCell) {
     // Drop cells with too little points
-    System.out.println("cell bbx size: " + inCell.getBbxSize());
-    System.out.println("min bbx size: " + minBbxSize);
+//    System.out.println("cell bbx size: " + inCell.getBbxSize());
+//    System.out.println("min bbx size: " + minBbxSize);
     if (inCell.getPtsSize() < minPts) {
       return;
     }

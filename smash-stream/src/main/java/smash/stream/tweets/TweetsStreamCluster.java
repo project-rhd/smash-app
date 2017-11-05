@@ -79,7 +79,7 @@ public class TweetsStreamCluster {
     Map<String, String> kafkaParams = new HashMap<>();
     Set<String> topicsSet = new HashSet<>();
     kafkaParams.put("metadata.broker.list", "scats-1-interface:9092");
-    kafkaParams.put("auto.offset.reset", "smallest");
+//    kafkaParams.put("auto.offset.reset", "smallest");
     topicsSet.add("tweets");
 
 
@@ -203,7 +203,12 @@ public class TweetsStreamCluster {
         });
 
       // Phase-3: Union two RDDs and apply Fast-Partition
-      JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> stObj1);
+      JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> {
+        if (stObj1.isNewInput())
+          return stObj1;
+        else
+          return stObj2;
+      });
       //TODO Memory only could be better
       union.persist(StorageLevel.MEMORY_AND_DISK());
       List<Map.Entry<Vector<Double>, Boolean>> points = union.map(tuple -> Maps.immutableEntry(tuple._2.getSTVector(spatioTemp_ratio), tuple._2.isNewInput())).collect();
@@ -211,7 +216,7 @@ public class TweetsStreamCluster {
       double max_t = DbscanTask.get_STDistance_radian(0d, queryEndTime.getTime(), spatioTemp_ratio);
       ReferencedEnvelope3D bbox = new ReferencedEnvelope3D(144.624, 145.624, -38.03535, -37.03535, min_t, max_t, null);
       ClusterCell topCell = new ClusterCell("000", points, bbox);
-      CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon, spatioTemp_ratio);
+      CellsPartitioner partitioner = new CellsPartitioner(topCell, 2 * epsilon, maxPts, minPts, epsilon);
       partitioner.doPartition();
       Map<String, ClusterCell> map = partitioner.getCellsMap();
 
@@ -235,11 +240,11 @@ public class TweetsStreamCluster {
           Map.Entry<String, ClusterCell> entry = cellItr.next();
           if (entry.getValue().getBbx().contains(coordinate.get(0), coordinate.get(1), coordinate.get(2))) {
             result.add(new Tuple2<>(entry.getValue().getCellId(), tuple._2));
-            return result.iterator();
           }
         }
         // if points do not belong to any cells (which means they are must Noise points)
-        result.add(new Tuple2<>("NOISE", tuple._2));
+        if (result.isEmpty())
+          result.add(new Tuple2<>("NOISE", tuple._2));
         return result.iterator();
       }).groupByKey();
 
@@ -562,7 +567,6 @@ public class TweetsStreamCluster {
     ssc.start();
     ssc.awaitTermination();
   }
-
 
 
 }
