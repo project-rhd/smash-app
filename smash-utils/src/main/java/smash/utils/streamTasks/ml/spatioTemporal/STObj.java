@@ -23,6 +23,7 @@ public class STObj implements Serializable {
   private String clusterID;
   private String clusterLabel;
   private Boolean newInput = true;
+  private Boolean toBeUpdated = false;
 //  private SimpleFeature feature;
   private String json;
 
@@ -36,6 +37,8 @@ public class STObj implements Serializable {
     coordinates.add(0, geo.getX());
     coordinates.add(1, geo.getY());
 
+    this.clusterID = clusterID;
+    this.clusterLabel = clusterLabel;
     this.json = json;
   }
 
@@ -132,9 +135,13 @@ public class STObj implements Serializable {
     this.newInput = newInput;
   }
 
-  //  public void setJson(String json) {
-//    this.json = json;
-//  }
+  public Boolean getToBeUpdated() {
+    return toBeUpdated;
+  }
+
+  public void setToBeUpdated(Boolean toBeUpdated) {
+    this.toBeUpdated = toBeUpdated;
+  }
 
   protected STObj clone(){
 //    return new STObj(this.feature, this.timestamp, this.clusterID, this.clusterLabel);

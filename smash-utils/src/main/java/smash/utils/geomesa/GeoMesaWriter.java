@@ -90,19 +90,23 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
           logger.error(e.getMessage());
           return false;
         }
-      } else{
+      } else {
         logger.error("geoMesaFeatureWriter has not been initiated");
         return false;
       }
     }
   }
 
-  public Iterator<SimpleFeature> read (Filter q) {
-    if (geoMesaFeatureStore == null){
+  public Iterator<SimpleFeature> read(Filter q) {
+    if (geoMesaFeatureStore == null) {
       logger.error("geoMesaFeatureStore has not been initiated");
       return new ArrayList<SimpleFeature>().iterator();
     }
-    SimpleFeatureCollection collection = geoMesaFeatureStore.getFeatures(q);
+    SimpleFeatureCollection collection = null;
+    if (q != null)
+      collection = geoMesaFeatureStore.getFeatures(q);
+    else
+      collection = geoMesaFeatureStore.getFeatures();
     return DataUtilities.iterator(collection.features());
   }
 

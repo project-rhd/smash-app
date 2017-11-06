@@ -4,21 +4,27 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonSyntaxException;
 import kafka.serializer.StringDecoder;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.KafkaUtils;
+import org.geotools.data.Query;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.geometry.jts.ReferencedEnvelope3D;
 import org.joda.time.DateTime;
 import org.kohsuke.args4j.CmdLineException;
+import org.locationtech.geomesa.spark.GeoMesaSpark;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
+import org.locationtech.geomesa.spark.SpatialRDDProvider;
+import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
 import org.slf4j.Logger;
@@ -88,7 +94,6 @@ public class TweetsStreamCluster {
 
     // Step 2. Create SparkStreaming context and define the operations.
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(10));
-
     JavaPairInputDStream<String, String> directKafkaStream =
       KafkaUtils.createDirectStream(
         ssc,
@@ -97,14 +102,15 @@ public class TweetsStreamCluster {
         kafkaParams, topicsSet
       );
 
-    // For each data pair in stream: tuple[_1, _2]
+    JavaSparkContext sc = JavaSparkContext.fromSparkContext(ssc.sparkContext().sc());
+    SpatialRDDProvider sp = GeoMesaSpark.apply(options.getAccumuloOptions2());
+    JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
+
+    // Step 3. For each data pair in stream: tuple[_1, _2]
     directKafkaStream.toJavaDStream().foreachRDD(tickRDD -> {
       // Block for each tick - Running in streaming-job-executor-0 process (The Driver)
-//      if (tickRDD.isEmpty())
-//        return;
       //Todo read next clusterID from DB before accepting the data stream
       //Todo Apply Datum?
-      Long nxtCluId = 0L;
       // Min number of points to form a cluster
       Long minPts = 3L;
       Long maxPts = 100L;
@@ -133,7 +139,6 @@ public class TweetsStreamCluster {
         return flatted.iterator();
       });
       if (incomeRDD.isEmpty()) return;
-      //      System.out.println("incomeSize: " + incomeRDD.count());
 
       // Phase-2: Get earliest timestamp of the data in this tick
       List<STObj> reducedBorderPoints = incomeRDD.aggregate(new ArrayList<STObj>(2), (list, t) -> {
@@ -160,15 +165,13 @@ public class TweetsStreamCluster {
           return list1;
         }
       });
-
       if (reducedBorderPoints.size() < 2 || reducedBorderPoints.get(0) == null || reducedBorderPoints.get(1) == null)
         return;
+
       // Query history data
-      Long timeMinDis = DbscanTask.covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1);
+      Long timeMinDis = DbscanTask.covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts);
       Date queryStartTime = new Date(reducedBorderPoints.get(0).getTimestamp().getTime() - timeMinDis);
       Date queryEndTime = new Date(reducedBorderPoints.get(1).getTimestamp().getTime() + timeMinDis);
-
-      //TODO use spatialRDDProvider for reading data from geoMesa
       Filter filter = null;
       try {
         filter = CQL.toFilter("created_at DURING " +
@@ -178,11 +181,12 @@ public class TweetsStreamCluster {
       } catch (CQLException e) {
         logger.warn(e.getMessage());
       }
-      GeoMesaWriter writer =
-        GeoMesaWriter.getThreadSingleton(options, TweetsFeatureFactory.FT_NAME);
-      Iterator<SimpleFeature> sfItr = writer.read(filter);
-      ArrayList<STObj> historyDataList = new ArrayList<>();
-      sfItr.forEachRemaining(sf -> {
+
+      // ========================
+      JavaRDD<SimpleFeature> featureRDD = jsp
+        .rdd(new Configuration(), sc, options.getAccumuloOptions(), new Query(TweetsFeatureFactory.FT_NAME, filter));
+      JavaPairRDD<String, STObj> historyRDD = featureRDD.flatMapToPair(sf->{
+        List<Tuple2<String, STObj>> flatted = new ArrayList<>();
         String tweetId = TweetsFeatureFactory.getObjId(sf);
         if (tweetId != null) {
           Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
@@ -191,24 +195,48 @@ public class TweetsStreamCluster {
           Tweet tweet = TweetsFeatureFactory.fromSFtoPojo(sf);
           STObj stObj = new STObj(sf, ts, clusterId, clusterLabel, tweet.toJSON());
           stObj.setNewInput(false);
-          historyDataList.add(stObj);
-        }
-      });
-      JavaPairRDD<String, STObj> historyRDD = ssc.sparkContext()
-        .parallelize(historyDataList).flatMapToPair(stObj -> {
-          List<Tuple2<String, STObj>> flatted = new ArrayList<>();
-          if (stObj != null && stObj.getObjId() != null)
+          if (stObj.getObjId() != null)
             flatted.add(new Tuple2<>(stObj.getObjId(), stObj));
-          return flatted.iterator();
-        });
+        }
+        return flatted.iterator();
+      });
+
+
+      // ========================
+//      GeoMesaWriter writer =
+//        GeoMesaWriter.getThreadSingleton(options, TweetsFeatureFactory.FT_NAME);
+//      Iterator<SimpleFeature> sfItr = writer.read(filter);
+//      ArrayList<STObj> historyDataList = new ArrayList<>();
+//      sfItr.forEachRemaining(sf -> {
+//        String tweetId = TweetsFeatureFactory.getObjId(sf);
+//        if (tweetId != null) {
+//          Date ts = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
+//          String clusterId = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID);
+//          String clusterLabel = (String) sf.getAttribute(TweetsFeatureFactory.CLUSTER_LABEL);
+//          Tweet tweet = TweetsFeatureFactory.fromSFtoPojo(sf);
+//          STObj stObj = new STObj(sf, ts, clusterId, clusterLabel, tweet.toJSON());
+//          stObj.setNewInput(false);
+//          historyDataList.add(stObj);
+//        }
+//      });
+//      JavaPairRDD<String, STObj> historyRDD = ssc.sparkContext()
+//        .parallelize(historyDataList).flatMapToPair(stObj -> {
+//          List<Tuple2<String, STObj>> flatted = new ArrayList<>();
+//          if (stObj != null && stObj.getObjId() != null)
+//            flatted.add(new Tuple2<>(stObj.getObjId(), stObj));
+//          return flatted.iterator();
+//        });
+      //=======================
 
       // Phase-3: Union two RDDs and apply Fast-Partition
-      JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD).reduceByKey((stObj1, stObj2) -> {
-        if (stObj1.isNewInput())
+      JavaPairRDD<String, STObj> union = incomeRDD.union(historyRDD)
+        .reduceByKey((stObj1, stObj2) -> {
+        if (!stObj1.isNewInput())
           return stObj1;
         else
           return stObj2;
       });
+
       //TODO Memory only could be better
       union.persist(StorageLevel.MEMORY_AND_DISK());
       List<Map.Entry<Vector<Double>, Boolean>> points = union.map(tuple -> Maps.immutableEntry(tuple._2.getSTVector(spatioTemp_ratio), tuple._2.isNewInput())).collect();
@@ -220,14 +248,9 @@ public class TweetsStreamCluster {
       partitioner.doPartition();
       Map<String, ClusterCell> map = partitioner.getCellsMap();
 
-      map.forEach((id, clusterCell) -> {
-        System.out.println(id);
-        System.out.println(clusterCell.getPoints());
-        System.out.println(clusterCell.getFinalSize());
-        System.out.println(clusterCell.getBbx());
-        System.out.println("=============================");
-      });
-
+//      map.forEach((id, clusterCell) -> {
+//        System.out.println(id + " size: " + clusterCell.getFinalSize());
+//      });
 
       // Phase-4: Broadcast cells information. Shuffle data and do local DBSCAN
       Broadcast<Map<String, ClusterCell>> b_cellsMap = ssc.sparkContext().broadcast(map);
@@ -243,23 +266,20 @@ public class TweetsStreamCluster {
           }
         }
         // if points do not belong to any cells (which means they are must Noise points)
-        if (result.isEmpty())
-          result.add(new Tuple2<>("NOISE", tuple._2));
+//        if (result.isEmpty())
+//          result.add(new Tuple2<>("NOISE", tuple._2));
         return result.iterator();
       }).groupByKey();
 
       // <clusterId#objId or NOISE#objId , STObj>
       JavaPairRDD<String, STObj> localClusteredRDD = shuffledPairRDD.flatMapToPair(tuple -> {
         ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
-        Map<String, STObj> toBeUpdated;
+        ArrayList<STObj> toBeUpdated;
         if (!tuple._1.equals("NOISE")) {
           toBeUpdated = DbscanTask.localDBSCAN(tuple._2, epsilon, spatioTemp_ratio, minPts);
-          toBeUpdated.forEach((id, STObj) -> {
-            result.add(new Tuple2<>(id, STObj));
-          });
-        } else {
-          tuple._2.forEach(stObj -> {
-            result.add(new Tuple2<>("NOISE#" + stObj.getObjId(), stObj));
+          toBeUpdated.forEach((stObj) -> {
+            String id = stObj.getObjId();
+            result.add(new Tuple2<>(id, stObj));
           });
         }
         return result.iterator();
@@ -269,14 +289,7 @@ public class TweetsStreamCluster {
       //      localClusteredRDD.persist(StorageLevel.MEMORY_ONLY());
 
       // Fork 1 <objId, List<stobj>> only non-noise data
-      JavaPairRDD<String, ArrayList<STObj>> objId_STObj_pair = localClusteredRDD.flatMapToPair(tuple -> {
-        ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
-        String[] ids = tuple._1.split("#");
-        if (!ids[0].equals("NOISE")) {
-          result.add(new Tuple2<>(ids[1], tuple._2));
-        }
-        return result.iterator();
-      }).aggregateByKey(new ArrayList<>(), (list, stObj) -> {
+      JavaPairRDD<String, ArrayList<STObj>> objId_STObj_pair = localClusteredRDD.aggregateByKey(new ArrayList<>(), (list, stObj) -> {
         list.add(stObj);
         return list;
       }, (list1, list2) -> {
@@ -305,10 +318,7 @@ public class TweetsStreamCluster {
         }
         // Now we find or elect a core for this point, point all clusterID to this its od
         if (core != null) {
-//          for (String id : set) {
-          //            String key = stObj.getClusterID();
           result.add(new Tuple2<>(set, core.getClusterID()));
-//          }
         }
         // Means this point are Border of very limit number of clusters(<minPts), then a merge is not needed.
         else {
@@ -316,10 +326,6 @@ public class TweetsStreamCluster {
         }
         return result.iterator();
       });
-
-//      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.mapToPair(tuple -> {
-//        return new Tuple2<>(tuple._2._1, tuple._2._2);
-//      }).distinct();
 
       ArrayList<Tuple2<HashSet<String>, String>> set_list = Lists.newArrayList(from_to_ClusterIdPair.collect());
       HashMap<String, String> newMap = new HashMap<>();
@@ -349,12 +355,7 @@ public class TweetsStreamCluster {
       Broadcast<HashMap<String, String>> b_mergeMap = ssc.sparkContext().broadcast(newMap);
 
       // Fork 2 <STObj>
-      JavaPairRDD<String, STObj> resultMap = localClusteredRDD.flatMapToPair(tuple -> {
-        ArrayList<Tuple2<String, STObj>> result = new ArrayList<>();
-        String objId = tuple._1.split("#")[1];
-        result.add(new Tuple2<>(objId, tuple._2));
-        return result.iterator();
-      }).aggregateByKey(new ArrayList<STObj>(), (list, stObj) -> {
+      JavaPairRDD<String, STObj> resultMap = localClusteredRDD.aggregateByKey(new ArrayList<STObj>(), (list, stObj) -> {
         list.add(stObj);
         return list;
       }, (list1, list2) -> {
@@ -383,16 +384,17 @@ public class TweetsStreamCluster {
           resultPoint = stObjs.get(0);
         } else
           resultPoint = core;
-
+        assert (resultPoint.getClusterID() != null && !resultPoint.getClusterID().isEmpty());
         String toClusterId = b_mergeMap.getValue().get(resultPoint.getClusterID());
-        if (toClusterId != null)
-          resultPoint.setClusterID(toClusterId);
+//        if (toClusterId != null)
+//          resultPoint.setClusterID(toClusterId);
+        resultPoint.setToBeUpdated(true);
         return new Tuple2<>(resultPoint.getObjId(), resultPoint);
       });
 
 
-      JavaRDD<STObj> finalRDD = union.union(resultMap).reduceByKey((stObj1, stObj2) -> {
-        if (stObj1.getClusterID() != null)
+      JavaRDD<STObj> finalRDD = incomeRDD.union(resultMap).reduceByKey((stObj1, stObj2) -> {
+        if (stObj1.getToBeUpdated() && stObj1.getClusterID()!=null)
           return stObj1;
         else
           return stObj2;
@@ -401,25 +403,18 @@ public class TweetsStreamCluster {
       });
 
       JavaRDD<SimpleFeature> finalSFRDD = finalRDD.map(stObj -> {
-//        System.out.println(stObj.getJson());
         Tweet tweet = Tweet.fromJSON(stObj.getJson());
         SimpleFeature sf = TweetsFeatureFactory.createFeature(tweet);
 //        sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_ID, stObj.getClusterID());
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_LABEL, stObj.getClusterLabel());
+
         return sf;
       });
       FeatureRDDToGeoMesa.save(options, finalSFRDD, ssc.sparkContext());
       FeatureRDDToGeoMesa.closeFeatureWriterOnSparkExecutors(ssc.sparkContext());
 
-//      System.out.println(finalRDD.count());
 
-//      finalMap.collect().forEach(tuple2->{
-//        System.out.println(tuple2._1 + " : " + tuple2._2.getClusterID() + " : " + tuple2._2.getClusterLabel());
-//      });
-//      newMap.forEach((set, id)->{
-//        System.out.println(Joiner.on("#").join(set) + " : " + id);
-//      });
 
 
 //      JavaPairRDD<HashSet<String>, String> tmp = from_to_ClusterIdPair.reduceByKey((t1, t2) -> {

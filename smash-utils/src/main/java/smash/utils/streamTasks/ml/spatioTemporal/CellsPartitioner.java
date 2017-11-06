@@ -49,7 +49,7 @@ public class CellsPartitioner implements Serializable {
     if (inCell.getPtsSize() < minPts) {
       return;
     }
-    if(!inCell.containsNewPoint())  //TODO filter cells contain no new input
+    if(!inCell.isContainNewPoints())  //TODO filter cells contain no new input
       return;
     // Continue divide into 4 seb-cells
     else if (inCell.getPtsSize() > maxPts && inCell.getBbxSize() > minBbxSize) {
@@ -128,22 +128,26 @@ public class CellsPartitioner implements Serializable {
         ReferencedEnvelope3D newEnlp = entry.getValue();
         List<Map.Entry<Vector<Double>, Boolean>> newPoints = new ArrayList<>();
         List<Map.Entry<Vector<Double>, Boolean>> leftPoints = new ArrayList<>();
-        for (int j = 0; j < points.size(); j++) {
-          Map.Entry<Vector<Double>, Boolean> point = points.remove(j);
-          if (newEnlp.contains(point.getKey().get(0), point.getKey().get(1), point.getKey().get(2)))
+        Boolean containNewPts = false;
+        for (Map.Entry<Vector<Double>, Boolean> point : points){
+          if (newEnlp.contains(point.getKey().get(0), point.getKey().get(1), point.getKey().get(2))){
             newPoints.add(point);
+            if (point.getValue() && !containNewPts)
+              containNewPts = true;
+          }
           else
             leftPoints.add(point);
         }
         points = leftPoints;
         ClusterCell newCell = new ClusterCell(id, newPoints, newEnlp);
+        newCell.setContainNewPoints(containNewPts);
         divideOrSave(newCell);
       }
     }
     // save to map
     else {
       ClusterCell cell = inCell.clearPoints();
-      cell.getBbx().expandBy(extendDist);
+      cell.getBbx().expandBy(extendDist * 1.01);
       cellsMap.put(cell.getCellId(), cell);
     }
   }

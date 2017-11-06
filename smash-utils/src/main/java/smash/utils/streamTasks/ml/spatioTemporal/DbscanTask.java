@@ -111,26 +111,24 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
     return null;
   }
 
-  public static Map<String, STObj> localDBSCAN(Iterable<STObj> stObjItrFac, Double epsilon, Double spatioTemp_ratio, Long minPts) {
-    Map<String, STObj> toBeUpdated = new HashMap<>();
-    Map<String, STObj> Resource = new HashMap<>();
-    ArrayList<STObj> localPointList = Lists.newArrayList(stObjItrFac.iterator());
+  public static ArrayList<STObj> localDBSCAN(Iterable<STObj> stObjItrFac, Double epsilon, Double spatioTemp_ratio, Long minPts) {
+    ArrayList<STObj> toBeUpdated = new ArrayList<>();
+//    ArrayList<STObj> localPointList = Lists.newArrayList(stObjItrFac.iterator());
     stObjItrFac.iterator().forEachRemaining(stObj -> {
       // For each un-flagged non-cluster point
-      if ((stObj.getClusterID() == null || stObj.getClusterID().equals(""))) {
-        extendFromSeed(stObj, localPointList, toBeUpdated, epsilon, spatioTemp_ratio, minPts);
+      if ((stObj.getClusterID() == null || stObj.getClusterID().isEmpty())) {
+        extendFromSeed(stObj, stObjItrFac, toBeUpdated, epsilon, spatioTemp_ratio, minPts);
       } else {
         String key = stObj.getClusterID() + "#" + stObj.getObjId();
-        // Avoid overwrite updated cluster label
-        toBeUpdated.putIfAbsent(key, stObj);
+        toBeUpdated.add(stObj);
       }
     });
     return toBeUpdated;
   }
 
-  public static void extendFromSeed(STObj seed, List<STObj> staticPointList, Map<String, STObj> toBeUpdated, Double epsilon, Double spatioTemp_ratio, Long minPts) {
+  public static void extendFromSeed(STObj seed, Iterable<STObj> stObjItrFac, ArrayList<STObj> toBeUpdated, Double epsilon, Double spatioTemp_ratio, Long minPts) {
     assert (seed.getClusterID() == null && seed.getClusterLabel() == null);
-    ArrayList<STObj> nbList = seed.getNeighbours(staticPointList.iterator(), epsilon, spatioTemp_ratio);
+    ArrayList<STObj> nbList = seed.getNeighbours(stObjItrFac.iterator(), epsilon, spatioTemp_ratio);
 //    System.out.println("numOf NB: " + nbList.size());
     if (nbList.size() > minPts) {
       // stObj is a core, use an uuid as a unique new cluster ID
@@ -138,16 +136,16 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
       String newClusterId = UUID.randomUUID().toString(); //seed.getObjId().split("-")[1];
       seed.setClusterID(newClusterId);
       seed.setClusterLabel(STObj.LABEL_CORE);
-      toBeUpdated.put(seed.getClusterID() + "#" + seed.getObjId(), seed);
+      toBeUpdated.add(seed);
       nbList.forEach(nbStObj -> {
         // if the neighbour is an un-clustered point
-        if (nbStObj.getClusterID() == null || nbStObj.getClusterID().equals("")) {
-          STObj duplicate = nbStObj.clone();  // TODO reconsider
-          duplicate.setClusterID(newClusterId);
-          duplicate.setClusterLabel(STObj.LABEL_BORDER);
-          toBeUpdated.put(duplicate.getClusterID() + "#" + duplicate.getObjId(), duplicate);
+        if (nbStObj.getClusterID() == null || nbStObj.getClusterID().isEmpty()) {
+//          STObj duplicate = nbStObj.clone();  // TODO reconsider
+          nbStObj.setClusterID(newClusterId);
+          nbStObj.setClusterLabel(STObj.LABEL_BORDER);
+          toBeUpdated.add(nbStObj);
           // expand - Inner self call
-          extendFromSeed(nbStObj, staticPointList, toBeUpdated, epsilon, spatioTemp_ratio, minPts);  //TODO needs reconsider if this is needed or if clone is needed
+          extendFromSeed(nbStObj, stObjItrFac, toBeUpdated, epsilon, spatioTemp_ratio, minPts);  //TODO needs reconsider if this is needed or if clone is needed
         }
         // If the neighbour is a core of another cluster
         else if (nbStObj.getClusterLabel().equals(STObj.LABEL_CORE)) {
@@ -156,16 +154,16 @@ public class DbscanTask<T extends Vector<Double>, U> extends AbstractTask<T, U> 
           duplicate.setClusterID(newClusterId);
           // Can determine it is a border of the new cluster for now. leave merge phase to merge its real label
           duplicate.setClusterLabel(STObj.LABEL_BORDER);
-          toBeUpdated.put(duplicate.getClusterID() + "#" + duplicate.getObjId(), duplicate);
+          toBeUpdated.add(duplicate);
         }
         // If the neighbour is a border of another cluster
         else if (nbStObj.getClusterLabel().equals(STObj.LABEL_BORDER)) {
-          if (nbStObj.getNeighbours(staticPointList.iterator(), epsilon, spatioTemp_ratio).size() > minPts)
-            nbStObj.setClusterLabel(STObj.LABEL_CORE);
-          toBeUpdated.put(nbStObj.getClusterID() + "#" + nbStObj.getObjId(), nbStObj);
           STObj duplicate = nbStObj.clone();
+          if (nbStObj.getNeighbours(stObjItrFac.iterator(), epsilon, spatioTemp_ratio).size() > minPts)
+            duplicate.setClusterLabel(STObj.LABEL_CORE);
+//          toBeUpdated.add(nbStObj);
           duplicate.setClusterID(newClusterId);
-          toBeUpdated.put(duplicate.getClusterID() + "#" + duplicate.getObjId(), duplicate);
+          toBeUpdated.add(duplicate);
         }
       });
     } else {

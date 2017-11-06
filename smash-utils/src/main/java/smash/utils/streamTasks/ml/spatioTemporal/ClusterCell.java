@@ -19,6 +19,7 @@ public class ClusterCell implements Serializable{
   private ArrayList<Map.Entry<Vector<Double>, Boolean>> points;
   private ReferencedEnvelope3D bbx;
   private long finalSize = 0;
+  private boolean containNewPoints = true;
 
   public ClusterCell(String cellId, List<Map.Entry<Vector<Double>, Boolean>> points, ReferencedEnvelope3D bbx) {
     this.cellId = cellId;
@@ -61,15 +62,24 @@ public class ClusterCell implements Serializable{
   }
 
 
-  public Boolean containsNewPoint(){
-    Boolean containsNesPoint = false;
-    for (Map.Entry<Vector<Double>, Boolean> point: points){
-      assert (point.getValue() != null);
-      if (point.getValue()){
-        containsNesPoint = true;
-        break;
-      }
-    }
-    return containsNesPoint;
+//  public Boolean containsNewPoint(){
+//    Boolean containsNesPoint = false;
+//    for (Map.Entry<Vector<Double>, Boolean> point: points){
+//      assert (point.getValue() != null);
+//      if (point.getValue()){
+//        containsNesPoint = true;
+//        break;
+//      }
+//    }
+//    return containsNesPoint;
+//  }
+
+
+  public boolean isContainNewPoints() {
+    return containNewPoints;
+  }
+
+  public void setContainNewPoints(boolean containNewPoints) {
+    this.containNewPoints = containNewPoints;
   }
 }
