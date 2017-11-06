@@ -66,8 +66,7 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
         (GeoMesaFeatureStore) dataStore.getFeatureSource(typeName);
     }
     if (geoMesaFeatureWriter == null) {
-      System.out.println("Init geoMesaFeatureWriter");
-      logger.info("Init geoMesaFeatureWriter");
+      if(logger.isDebugEnabled()) logger.debug("Init geoMesaFeatureWriter");
       geoMesaFeatureWriter = ((GeoMesaDataStore) geoMesaFeatureStore
         .getDataStore()).getFeatureWriterAppend(typeName, Transaction.AUTO_COMMIT);
     }
@@ -128,8 +127,8 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
         geoMesaFeatureWriter.close();
         geoMesaFeatureWriter = null;
         geoMesaFeatureStore = null;
-        System.out.println("geoMesaFeatureWriter closed");
-        logger.info("geoMesaFeatureWriter closed");
+        if(logger.isDebugEnabled())
+          logger.debug("geoMesaFeatureWriter closed");
       }
     }
   }

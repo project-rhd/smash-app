@@ -46,7 +46,7 @@ public class DataStreamGenerator {
     props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
     props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
 
-    SparkConf sparkConf = new SparkConf().setAppName(this.getClass().getSimpleName()).setMaster("local[2]");
+    SparkConf sparkConf = new SparkConf().setAppName(this.getClass().getSimpleName()).setMaster("local[2]").set("spark.ui.port", "4041");
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
       JavaRDD<String> rawJson = sc.textFile("hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json");
