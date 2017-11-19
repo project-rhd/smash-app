@@ -61,7 +61,7 @@ public class TweetsStreamCluster {
 
   public static void main(String[] args)
     throws IllegalAccessException, CmdLineException, NoSuchFieldException {
-    GeoMesaOptions options = new GeoMesaOptions();
+    StreamAppOptions options = new StreamAppOptions();
     options.parse(args);
     TweetsStreamCluster importer = new TweetsStreamCluster();
     JobTimer.print(() -> {
@@ -77,7 +77,7 @@ public class TweetsStreamCluster {
     sparkConf.set("spark.files.maxPartitionBytes", "33554432"); // 32MB
     sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
     sparkConf.set("spark.kryo.registrator", GeoMesaSparkKryoRegistrator.class.getName());
-    this.sparkConf.set("spark.streaming.backpressure.enabled", "true");
+//    this.sparkConf.set("spark.streaming.backpressure.enabled", "true");
     Class[] classes = new Class[]{STObj.class, Vector.class, ClusterCell.class};
     this.sparkConf.registerKryoClasses(classes);
   }
@@ -87,7 +87,7 @@ public class TweetsStreamCluster {
   }
 
   // TODO need new options for including kafka parameters
-  public void run(GeoMesaOptions options) throws InterruptedException, IOException {
+  public void run(StreamAppOptions options) throws InterruptedException, IOException {
     // Running in the main process
     Map<String, String> kafkaParams = new HashMap<>();
     Set<String> topicsSet = new HashSet<>();
@@ -100,7 +100,7 @@ public class TweetsStreamCluster {
     GeoMesaDataUtils.saveFeatureType(options, TweetsFeatureFactory.SFT);
 
     // Step 2. Create SparkStreaming context and define the operations.
-    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(10));
+    JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(options.intervalSec));
     JavaPairInputDStream<String, String> directKafkaStream =
       KafkaUtils.createDirectStream(
         ssc,
@@ -113,7 +113,7 @@ public class TweetsStreamCluster {
     //Todo Apply Datum?
     // Min number of points to form a cluster
     Long minPts = 3L;
-    Long maxPts = 100L;
+    Long maxPts = options.maxPts;
     // Time-Spatial epsilon
     Long dist_time = 600000L; //10min in milli-sec
     Double dist_spatial = 0.1D; //0.1km
@@ -130,7 +130,7 @@ public class TweetsStreamCluster {
 
       // TODO may not need to parse into SimpleFeature before creating STObj
       // Phase-1: Use STObj as the generic object for social media points
-      JavaPairRDD<String, STObj> incomeRDD = tickRDD.distinct().flatMapToPair(tuple -> {
+      JavaPairRDD<String, STObj> incomeRDD = tickRDD.flatMapToPair(tuple -> {
         List<Tuple2<String, STObj>> flatted = new ArrayList<>();
         try {
           Tweet t = Tweet.fromJSON(tuple._2);
@@ -176,7 +176,7 @@ public class TweetsStreamCluster {
         return;
 
       // Query history data
-      Long timeMinDis = DbscanTask.covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts);
+      Long timeMinDis = DbscanTask.covertToTimeDiff(epsilon, spatioTemp_ratio) * (minPts - 1);
       Date queryStartTime = new Date(reducedBorderPoints.get(0).getTimestamp().getTime() - timeMinDis);
       Date queryEndTime = new Date(reducedBorderPoints.get(1).getTimestamp().getTime() + timeMinDis);
       Filter filter = null;

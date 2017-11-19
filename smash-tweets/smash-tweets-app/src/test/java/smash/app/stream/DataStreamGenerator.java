@@ -49,19 +49,20 @@ public class DataStreamGenerator {
     SparkConf sparkConf = new SparkConf().setAppName(this.getClass().getSimpleName()).setMaster("local[2]").set("spark.ui.port", "4041");
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
-      JavaRDD<String> rawJson = sc.textFile("hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json");
+//      hdfs://scats-1-master:9000/tweets/geoTweets_mel_new.json
+      JavaRDD<String> rawJson = sc.textFile("hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json");  //hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json
       Dataset<Row> tweetRaw = ss.read().json(rawJson).selectExpr("value.*");
       JavaRDD<String> tweetStrs = tweetRaw.toJSON().toJavaRDD();
       tweetStrs.foreachPartition(tweetIter->{
         Producer<String, String> producer = new KafkaProducer<>(props);
         tweetIter.forEachRemaining(tweetStr->{
-          String key = Tweet.fromJSON(tweetStr).getId_str();
-          System.out.println(key);
-          producer.send(new ProducerRecord<>("tweets", key, tweetStr));
-          try {
-            Thread.sleep(10l);
-          } catch (InterruptedException e) {
-            e.printStackTrace();
+          try{
+            String key = Tweet.fromJSON(tweetStr).getId_str();
+            System.out.println(key);
+            producer.send(new ProducerRecord<>("tweets", key, tweetStr));
+            Thread.sleep(3l); //4-500 2-900 3-600 1-1600 10-200 50-40 100
+          }catch (Exception e){
+            System.out.println(e.getMessage());
           }
         });
         producer.close();

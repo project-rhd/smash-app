@@ -58,6 +58,7 @@ ${client_spark_home}/bin/spark-submit \
 --driver-memory 4G \
 --executor-memory 4G \
 --conf spark.eventLog.enabled=true \
+--conf spark.executor.cores=2 \
 --class "smash.stream.tweets.TweetsStreamCluster" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
@@ -65,7 +66,9 @@ ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --user ${accumulo_user_name} \
 --password ${accumulo_user_pwd} \
 --tableName ${accumulo_table_name} \
---overwrite
+--overwrite \
+--intervalSec 30 \
+--maxPts 500
 
 
 if [ $? -eq 0 ]; then
