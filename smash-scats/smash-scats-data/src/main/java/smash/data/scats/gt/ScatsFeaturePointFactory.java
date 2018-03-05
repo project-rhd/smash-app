@@ -79,7 +79,7 @@ public class ScatsFeaturePointFactory {
 
   public static SimpleFeature buildFeatureFromRow(Row row, SimpleFeatureBuilder builder) throws ParseException {
     String wktPoint = row.getString(0);
-    String wktLine = row.getString(105);
+    String wktLine = row.getString(109);
     Point point = null;
     MultiLineString line = null;
     if (wktPoint != null && !wktPoint.equals("null")) {
@@ -125,11 +125,11 @@ public class ScatsFeaturePointFactory {
       String feature = i < 10 ? "v0" + Integer.toString(i) : "v" + Integer.toString(i);
       simpleFeature.setAttribute(feature, value);
     }
-    simpleFeature.setAttribute(DS_LOCATION, row.getString(100));
-    simpleFeature.setAttribute(NB_LANE, row.getString(101));
-    simpleFeature.setAttribute(LANE_MVT, row.getString(102));
-    simpleFeature.setAttribute(LOC_MVT, row.getString(103));
-    simpleFeature.setAttribute(HF, row.getString(104));
+    simpleFeature.setAttribute(DS_LOCATION, row.getString(104));  //100
+    simpleFeature.setAttribute(NB_LANE, row.getString(105));
+    simpleFeature.setAttribute(LANE_MVT, row.getString(106));
+    simpleFeature.setAttribute(LOC_MVT, row.getString(107));
+    simpleFeature.setAttribute(HF, row.getString(108));
     simpleFeature.setAttribute(UNIQUE_ROAD, line);
     return simpleFeature;
   }

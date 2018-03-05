@@ -19,7 +19,7 @@ accumulo_instance_id=smash
 zookeepers=scats-1-master:2181,scats-1-slave:2181,scats-2-slave:2181,scats-3-slave:2181,scats-4-slave:2181,scats-5-slave:2181,scats-6-slave:2181,scats-7-slave:2181,scats-8-slave:2181,scats-9-slave:2181,scats-10-slave:2181,scats-11-slave:2181,scats-12-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
-accumulo_table_name=tweets2
+accumulo_table_name=tweets
 
 # Path of raw data file in hdfs. e.g. /scats/sample700M.csv  VolumeData.CSV  volume_1G.csv volume.csv
 jar_name=smash-stream-0.1.0.jar
@@ -68,7 +68,7 @@ ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --tableName ${accumulo_table_name} \
 --overwrite \
 --intervalSec 30 \
---maxPts 500
+--maxPts 700
 
 
 if [ $? -eq 0 ]; then

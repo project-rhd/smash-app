@@ -19,12 +19,12 @@ accumulo_instance_id=smash
 zookeepers=scats-1-master:2181,scats-1-slave:2181,scats-2-slave:2181,scats-3-slave:2181,scats-4-slave:2181,scats-5-slave:2181,scats-6-slave:2181,scats-7-slave:2181,scats-8-slave:2181,scats-9-slave:2181,scats-10-slave:2181,scats-11-slave:2181,scats-12-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
-accumulo_table_name=scats
+accumulo_table_name=scats_2017
 
 # Path of raw data file in hdfs. e.g. /scats/sample700M.csv  VolumeData.CSV  volume_1G.csv volume.csv
-INPUT_VOLUME_FILE=/scats/volume.csv
+INPUT_VOLUME_FILE=/scats/2017/VSDATA_2017.csv
 INPUT_LAYOUT_FILE=/scats/SiteLayouts.csv
-INPUT_SHAPE_FILE=/scats/tlights_vic_4326.csv
+INPUT_SHAPE_FILE=/scats/traffic_lights_2016.7.csv  #tlights_vic_4326.csv
 INPUT_SHAPE_FILE2=/scats/uniq-roads.csv
 
 jar_name=smash-scats-app-0.1.0.jar

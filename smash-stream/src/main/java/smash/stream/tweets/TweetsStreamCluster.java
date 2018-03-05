@@ -115,8 +115,8 @@ public class TweetsStreamCluster {
     Long minPts = 3L;
     Long maxPts = options.maxPts;
     // Time-Spatial epsilon
-    Long dist_time = 600000L; //10min in milli-sec
-    Double dist_spatial = 0.1D; //0.1km
+    Long dist_time = 1200000L; //10min in milli-sec = 600000L
+    Double dist_spatial = 0.2D; //0.1km = 0.1D
     Double spatioTemp_ratio = 0.1D / 600000; // km/milli-sec
     Double epsilon = DbscanTask.get_STDistance_radian(dist_spatial, dist_time, spatioTemp_ratio);
 

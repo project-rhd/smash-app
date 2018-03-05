@@ -20,7 +20,7 @@ public class RawVolumeDataCleaner {
     boolean ignore = true;
     for (int i = 3; i < fields.length; i++) {
       String value = fields[i];
-      if (value.equals("") || Integer.parseInt(value) < 0) {
+      if (value.equals("") || (isInteger(value) && Integer.parseInt(value) < 0)) {
         fields[i] = "0";
       } else {
         fields[i] = value;
@@ -37,11 +37,27 @@ public class RawVolumeDataCleaner {
   public static String[] removeQuotation(String[] fields) {
     for (int i = 0; i < fields.length; i++) {
       String field = fields[i];
-      if (field.charAt(0) == '"' && field.charAt(field.length() - 1) == '"') {
+      if (field.length() > 1 && field.charAt(0) == '"' && field.charAt(field.length() - 1) == '"') {
         fields[i] = field.substring(1, field.length() - 1);
       }
     }
     return fields;
+  }
+
+  public static boolean isInteger(String s) {
+    return isInteger(s, 10);
+  }
+
+  public static boolean isInteger(String s, int radix) {
+    if (s.isEmpty()) return false;
+    for (int i = 0; i < s.length(); i++) {
+      if (i == 0 && s.charAt(i) == '-') {
+        if (s.length() == 1) return false;
+        else continue;
+      }
+      if (Character.digit(s.charAt(i), radix) < 0) return false;
+    }
+    return true;
   }
 
 

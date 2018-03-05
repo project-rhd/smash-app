@@ -138,7 +138,7 @@ public class TweetsCluster implements Serializable {
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_ID, clusterId);
         sf.setAttribute(TweetsFeatureFactory.CLUSTER_LABEL, clusterLabel);
         sf.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
-        System.out.println(sf.getID());
+//        System.out.println(sf.getID());
         return sf;
       });
       jsp.save(resultsRDD, options.getAccumuloOptions(), TweetsFeatureFactory.FT_NAME);

@@ -125,7 +125,7 @@ public class ScatsImporter implements Serializable {
       List<StructField> volume_field_names = new ArrayList<>();
       volume_field_names.add(DataTypes.createStructField("wktGeometry", DataTypes.StringType, true));
       for (String fieldName : volumeData_head.split(",")) {
-        fieldName = fieldName.substring(1, fieldName.length() - 1);
+//        fieldName = fieldName.substring(1, fieldName.length() - 1);
         volume_field_names.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
       }
       StructType VolumeDataSchema = DataTypes.createStructType(volume_field_names);

@@ -50,7 +50,7 @@ public class DataStreamGenerator {
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
 //      hdfs://scats-1-master:9000/tweets/geoTweets_mel_new.json
-      JavaRDD<String> rawJson = sc.textFile("hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json");  //hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json
+      JavaRDD<String> rawJson = sc.textFile("hdfs://scats-1-master:9000/tweets/geoTweets_melb_Jun_Dec_2017.json");  //hdfs://scats-1-master:9000/tweets/geoTweets_melb_2017.json
       Dataset<Row> tweetRaw = ss.read().json(rawJson).selectExpr("value.*");
       JavaRDD<String> tweetStrs = tweetRaw.toJSON().toJavaRDD();
       tweetStrs.foreachPartition(tweetIter->{
@@ -60,7 +60,7 @@ public class DataStreamGenerator {
             String key = Tweet.fromJSON(tweetStr).getId_str();
             System.out.println(key);
             producer.send(new ProducerRecord<>("tweets", key, tweetStr));
-            Thread.sleep(3l); //4-500 2-900 3-600 1-1600 10-200 50-40 100
+            Thread.sleep(2l); //4-500 2-900 3-600 1-1600 10-200 50-40 100
           }catch (Exception e){
             System.out.println(e.getMessage());
           }
