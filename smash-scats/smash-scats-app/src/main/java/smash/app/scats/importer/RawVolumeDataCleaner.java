@@ -20,7 +20,7 @@ public class RawVolumeDataCleaner {
     boolean ignore = true;
     for (int i = 3; i < fields.length; i++) {
       String value = fields[i];
-      if (value.equals("") || (isInteger(value) && Integer.parseInt(value) < 0)) {
+      if (value.equals("") || !isInteger(value) || (isInteger(value) && Integer.parseInt(value) < 0)) {
         fields[i] = "0";
       } else {
         fields[i] = value;

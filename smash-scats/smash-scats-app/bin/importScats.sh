@@ -62,8 +62,8 @@ fi
 echo "Task 3: Submit task in cluster mode to the spark master:" spark://${spark_master_address}:6066
 ${client_spark_home}/bin/spark-submit \
 --master spark://${spark_master_address}:6066 \
---driver-memory 4G \
---executor-memory 4G \
+--driver-memory 3G \
+--executor-memory 3G \
 --class "smash.app.scats.importer.ScatsImporter" \
 --deploy-mode cluster \
 --conf spark.eventLog.enabled=true \

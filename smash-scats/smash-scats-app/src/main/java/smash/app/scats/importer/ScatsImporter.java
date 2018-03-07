@@ -181,10 +181,10 @@ public class ScatsImporter implements Serializable {
         ArrayList<SimpleFeature> result = new ArrayList<>();
         SimpleFeatureBuilder featureBuilder = ScatsFeaturePointFactory.getFeatureBuilder();
         while (iter.hasNext()) {
-          SimpleFeature simpleFeature =
+          ArrayList<SimpleFeature> simpleFeatures =
             ScatsFeaturePointFactory.buildFeatureFromRow(iter.next(), featureBuilder);
-          if (simpleFeature != null)
-            result.add(simpleFeature);
+          if (simpleFeatures != null && simpleFeatures.size()>0)
+            result.addAll(simpleFeatures);
         }
         return result.iterator();
       }, false);
