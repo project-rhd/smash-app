@@ -18,7 +18,7 @@ accumulo_instance_id=smash
 zookeepers=scats-1-master:2181,scats-1-slave:2181,scats-2-slave:2181,scats-3-slave:2181,scats-4-slave:2181,scats-5-slave:2181,scats-6-slave:2181,scats-7-slave:2181,scats-8-slave:2181,scats-9-slave:2181,scats-10-slave:2181,scats-11-slave:2181,scats-12-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
-accumulo_table_name=scats
+accumulo_table_name=scats_2017
 
 jar_name=smash-scats-app-0.1.0.jar
 
@@ -48,8 +48,8 @@ fi
 echo "Task 3: Submit task in cluster mode to the spark master:" spark://${spark_master_address}:6066
 ${client_spark_home}/bin/spark-submit \
 --master spark://${spark_master_address}:6066 \
---driver-memory 4G \
---executor-memory 4G \
+--driver-memory 2560MB \
+--executor-memory 2560MB \
 --deploy-mode cluster \
 --conf spark.eventLog.enabled=true \
 --class "smash.app.scats.analyzer.ScatsAggregator" \
