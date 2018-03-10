@@ -16,7 +16,7 @@ client_hadoop_home=/home/darcular/Applications/hadoop-2.6.0
 
 accumulo_instance_id=smash
 # smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181
-zookeepers=smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181,smash-3-slave:2181,smash-4-slave:2181,smash-5-slave:2181,smash-6-slave:2181,smash-7-slave:2181,smash-8-slave:2181,smash-9-slave:2181,smash-10-slave:2181,smash-11-slave:2181,smash-12-slave:2181
+zookeepers=smash-1-master:2181,smash-1-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
 accumulo_table_name=tweets
@@ -54,11 +54,9 @@ ${client_spark_home}/bin/spark-submit \
 --verbose \
 --deploy-mode cluster \
 --master spark://${spark_master_address}:6066 \
---total-executor-cores 6 \
---driver-memory 4G \
---executor-memory 4G \
+--driver-memory 5G \
+--executor-memory 10G \
 --conf spark.eventLog.enabled=true \
---conf spark.executor.cores=2 \
 --class "smash.stream.tweets.TweetsStreamCluster" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \

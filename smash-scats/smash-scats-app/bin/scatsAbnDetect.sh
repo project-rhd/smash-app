@@ -50,7 +50,7 @@ ${client_spark_home}/bin/spark-submit \
 --deploy-mode cluster \
 --master spark://${spark_master_address}:6066 \
 --executor-cores 3 \
---total-executor-cores \
+--total-executor-cores 18 \
 --driver-memory 5G \
 --executor-memory 10G \
 --conf spark.eventLog.enabled=true \
