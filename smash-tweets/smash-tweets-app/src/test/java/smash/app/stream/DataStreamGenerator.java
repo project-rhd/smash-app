@@ -37,7 +37,7 @@ public class DataStreamGenerator {
   protected void run (GeoMesaOptions options) throws IOException, InterruptedException {
 
     Properties props = new Properties();
-    props.put("bootstrap.servers", "scats-1-interface:9092");
+    props.put("bootstrap.servers", "smash-1-interface:9092");
     props.put("acks", "all");
     props.put("retries", 0);
     props.put("batch.size", 16384);

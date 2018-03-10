@@ -2,6 +2,7 @@ package smash.data.scats.gt;
 
 import com.google.common.base.Joiner;
 import com.vividsolutions.jts.geom.*;
+import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.apache.spark.sql.Row;
 import org.geotools.factory.Hints;
@@ -12,6 +13,7 @@ import org.locationtech.geomesa.utils.interop.WKTUtils;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.referencing.FactoryException;
+import smash.data.scats.pojo.ScatsVolume;
 
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -140,5 +142,29 @@ public class ScatsFeaturePointFactory {
   public static ArrayList<SimpleFeature> buildFeatureFromRow(Row row) throws ParseException, SchemaException, FactoryException {
     SimpleFeatureBuilder builder = getFeatureBuilder();
     return buildFeatureFromRow(row, builder);
+  }
+
+  public static ScatsVolume fromSFtoPojo(SimpleFeature sf) {
+    String scatsSite = (String) sf.getAttribute(NB_SCATS_SITE);
+    String detectorNum = (String) sf.getAttribute("NB_DETECTOR");
+    Integer volume = (Integer) sf.getAttribute(VOLUME);
+    String dayOfWeek = (String) sf.getAttribute(DAY_OF_WEEK);
+    Date date = (Date) sf.getAttribute(QT_INTERVAL_COUNT);
+    String geo_wkt = (sf.getDefaultGeometry()).toString();
+    Object geo_line = sf.getAttribute(UNIQUE_ROAD);
+    String geo_wkt_line = null;
+    if (geo_line != null)
+      geo_wkt_line = geo_line.toString();
+
+    ScatsVolume scatsVolume = new ScatsVolume();
+    scatsVolume.setNb_scats_site(scatsSite);
+    scatsVolume.setNb_detector(detectorNum);
+    scatsVolume.setQt_interval_count(date);
+    scatsVolume.setDay_of_week(dayOfWeek);
+    scatsVolume.setVolume(volume);
+    scatsVolume.setGeoPointString(geo_wkt);
+    scatsVolume.setGeoLineString(geo_wkt_line);
+
+    return scatsVolume;
   }
 }
