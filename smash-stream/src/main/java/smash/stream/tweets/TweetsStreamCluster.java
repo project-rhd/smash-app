@@ -91,7 +91,7 @@ public class TweetsStreamCluster {
     // Running in the main process
     Map<String, String> kafkaParams = new HashMap<>();
     Set<String> topicsSet = new HashSet<>();
-    kafkaParams.put("metadata.broker.list", "scats-1-interface:9092");
+    kafkaParams.put("metadata.broker.list", "smash-1-interface:9092");
 //    kafkaParams.put("auto.offset.reset", "smallest");
     topicsSet.add("tweets");
 

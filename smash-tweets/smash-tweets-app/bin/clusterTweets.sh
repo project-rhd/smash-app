@@ -3,9 +3,9 @@
 #======= Primary Settings Start ==============================
 
 # Ip address of spark master.
-spark_master_address=scats-1-master
+spark_master_address=smash-1-master
 # Ip address of hadoop master. (the name node)
-hadoop_master_address=scats-1-master
+hadoop_master_address=smash-1-master
 # Directory in hdfs for placing jar. e.g. /scats
 jar_hdfs_dir=/tweets
 
@@ -15,8 +15,8 @@ client_spark_home=/home/darcular/Applications/spark-2.1.1-bin-hadoop2.6
 client_hadoop_home=/home/darcular/Applications/hadoop-2.6.0
 
 accumulo_instance_id=smash
-# scats-1-master:2181,scats-1-slave:2181,scats-2-slave:2181
-zookeepers=scats-1-master:2181,scats-1-slave:2181,scats-2-slave:2181,scats-3-slave:2181,scats-4-slave:2181,scats-5-slave:2181,scats-6-slave:2181,scats-7-slave:2181,scats-8-slave:2181,scats-9-slave:2181,scats-10-slave:2181,scats-11-slave:2181,scats-12-slave:2181
+# smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181
+zookeepers=smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181,smash-3-slave:2181,smash-4-slave:2181,smash-5-slave:2181,smash-6-slave:2181,smash-7-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
 accumulo_table_name=tweets
