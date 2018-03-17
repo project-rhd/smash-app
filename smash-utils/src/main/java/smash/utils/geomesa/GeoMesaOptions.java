@@ -1,11 +1,13 @@
 package smash.utils.geomesa;
 
+import org.apache.commons.beanutils.BeanUtils;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
 import org.kohsuke.args4j.spi.BooleanOptionHandler;
 
 import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,4 +72,71 @@ public class GeoMesaOptions implements Serializable {
     return results;
   }
 
+  public GeoMesaOptions copy(){
+    GeoMesaOptions copy = new GeoMesaOptions();
+    try {
+      BeanUtils.copyProperties(copy, this);
+    } catch (IllegalAccessException e) {
+      e.printStackTrace();
+    } catch (InvocationTargetException e) {
+      e.printStackTrace();
+    }
+    return copy;
+  }
+
+  public String getInstanceId() {
+    return instanceId;
+  }
+
+  public void setInstanceId(String instanceId) {
+    this.instanceId = instanceId;
+  }
+
+  public String getZookeepers() {
+    return zookeepers;
+  }
+
+  public void setZookeepers(String zookeepers) {
+    this.zookeepers = zookeepers;
+  }
+
+  public String getUser() {
+    return user;
+  }
+
+  public void setUser(String user) {
+    this.user = user;
+  }
+
+  public String getPassword() {
+    return password;
+  }
+
+  public void setPassword(String password) {
+    this.password = password;
+  }
+
+  public String getAuths() {
+    return auths;
+  }
+
+  public void setAuths(String auths) {
+    this.auths = auths;
+  }
+
+  public String getTableName() {
+    return tableName;
+  }
+
+  public void setTableName(String tableName) {
+    this.tableName = tableName;
+  }
+
+  public boolean isOverwrite() {
+    return overwrite;
+  }
+
+  public void setOverwrite(boolean overwrite) {
+    this.overwrite = overwrite;
+  }
 }

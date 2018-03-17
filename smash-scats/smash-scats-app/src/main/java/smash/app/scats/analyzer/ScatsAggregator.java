@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import smash.data.scats.gt.ScatsDOWFeatureFactory;
 import smash.data.scats.gt.ScatsFeaturePointFactory;
+import smash.data.scats.pojo.ScatsVolume;
 import smash.utils.JobTimer;
 import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.geomesa.GeoMesaOptions;
@@ -48,6 +49,8 @@ public class ScatsAggregator implements Serializable {
     this.sparkConf = sparkConf.setAppName(this.getClass().getSimpleName());
     this.sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
     sparkConf.set("spark.kryo.registrator", GeoMesaSparkKryoRegistrator.class.getName());
+    Class[] classes = new Class[]{ScatsVolume.class};
+    this.sparkConf.registerKryoClasses(classes);
   }
 
   public static void main(String[] args)
@@ -75,26 +78,30 @@ public class ScatsAggregator implements Serializable {
 
       JavaRDD<SimpleFeature> scatsFeatureRDD = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
-      scatsFeatureRDD = scatsFeatureRDD.repartition(128);
-      scatsFeatureRDD = scatsFeatureRDD.persist(StorageLevel.MEMORY_AND_DISK());
-      JavaPairRDD<String, double[]> rddResult = scatsFeatureRDD.mapToPair(simpleFeature -> {
-        String scatsSite = (String) simpleFeature.getAttribute(ScatsFeaturePointFactory.NB_SCATS_SITE);
-        String detectorNum = (String) simpleFeature.getAttribute("NB_DETECTOR");
-        Integer volume = (Integer) simpleFeature.getAttribute(ScatsFeaturePointFactory.VOLUME);
-        String dayOfWeek = (String) simpleFeature.getAttribute(ScatsFeaturePointFactory.DAY_OF_WEEK);
-        Date date = (Date) simpleFeature.getAttribute(ScatsFeaturePointFactory.QT_INTERVAL_COUNT);
+//      scatsFeatureRDD = scatsFeatureRDD.repartition(128);
+//      scatsFeatureRDD = scatsFeatureRDD.persist(StorageLevel.MEMORY_AND_DISK());
+      JavaPairRDD<String, double[]> rddResult = scatsFeatureRDD.mapToPair(sf -> {
+        ScatsVolume scatsVolume = ScatsFeaturePointFactory.fromSFtoPojo(sf);
+        String key = scatsVolume.getNb_scats_site() + "#" + scatsVolume.getQt_interval_count();
+        return new Tuple2<>(key, scatsVolume);
+      }).reduceByKey((scv1, scv2) -> {
+        scv1.setNb_detector("all");
+        Integer sum = scv1.getVolume() + scv2.getVolume();
+        scv1.setVolume(sum);
+        return scv1;
+      }).mapToPair(tuple2 -> {
+        ScatsVolume scv = tuple2._2;
+        String scatsSite = scv.getNb_scats_site();
+        String detectorNum = scv.getNb_detector();
+        Integer volume = scv.getVolume();
+        String dayOfWeek = scv.getDay_of_week();
+        Date date = scv.getQt_interval_count();
         SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
         df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
         String timeOfDay = df.format(date);
-        String geo_wkt = (simpleFeature.getDefaultGeometry()).toString();
-        Object geo_line = simpleFeature.getAttribute(ScatsFeaturePointFactory.UNIQUE_ROAD);
-        String geo_wkt_line = null;
-        if (geo_line != null)
-          geo_wkt_line = geo_line.toString();
-        detectorNum = "all";
-//        dayOfWeek = "all";
-        String key = scatsSite + "#" + detectorNum + "#" + dayOfWeek + "#" + timeOfDay + "#" + geo_wkt + "#" + geo_wkt_line;
-
+        String geo_wkt = scv.getGeoPointString();
+        String geo_wkt_line = scv.getGeoLineString();
+        String key = scatsSite + "#" +detectorNum + "#" + dayOfWeek + "#" + timeOfDay + "#" + geo_wkt + "#" + geo_wkt_line;
         long[] value = new long[2];
         value[0] = volume.longValue();
         value[1] = 1l;
@@ -106,10 +113,8 @@ public class ScatsAggregator implements Serializable {
         return a1;
       }).mapToPair(tuple -> {
         double[] result = new double[2];
-        for (int i = 0; i < result.length; i++) {
-          result[i] = tuple._2[i] / (double) tuple._2[tuple._2.length - 1];
-        }
-        result[result.length - 1] = (double) tuple._2[tuple._2.length - 1];
+        result[0] = ((double)tuple._2[0])/tuple._2[1];
+        result[1] = (double) tuple._2[1];
         return new Tuple2<>(tuple._1, result);
       });
 

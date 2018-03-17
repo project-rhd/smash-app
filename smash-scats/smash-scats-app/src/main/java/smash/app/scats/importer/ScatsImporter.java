@@ -88,9 +88,9 @@ public class ScatsImporter implements Serializable {
 
       // Read shape file from hdfs and parse into a hash-map
       HashMap<String, String> scatsPointShp =
-        readWktCsv("hdfs://scats-1-master:9000", options.inputPointShapeFile, "point");
+        readWktCsv(options.hdfsURL, options.inputPointShapeFile, "point");
       HashMap<String, String> scatsLineShp =
-        readWktCsv("hdfs://scats-1-master:9000", options.inputLineShapeFile, "line");
+        readWktCsv(options.hdfsURL, options.inputLineShapeFile, "line");
       Broadcast<HashMap> scatsPointShp_b = sc.broadcast(scatsPointShp);
       Broadcast<HashMap> scatsLineShp_b = sc.broadcast(scatsLineShp);
 

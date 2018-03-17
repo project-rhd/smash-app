@@ -62,8 +62,8 @@ fi
 echo "Task 3: Submit task in cluster mode to the spark master:" spark://${spark_master_address}:6066
 ${client_spark_home}/bin/spark-submit \
 --master spark://${spark_master_address}:6066 \
---driver-memory 3G \
---executor-memory 3G \
+--driver-memory 5G \
+--executor-memory 10G \
 --class "smash.app.scats.importer.ScatsImporter" \
 --deploy-mode cluster \
 --conf spark.eventLog.enabled=true \
@@ -77,7 +77,8 @@ ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --inputVolumeCSV ${input_volume_url} \
 --inputLayoutCSV ${input_layouts_url} \
 --inputPointShapeFile ${input_shp_url} \
---inputLineShapeFile ${input_shp_url2}
+--inputLineShapeFile ${input_shp_url2} \
+--hdfsURL ${hdfs_root}
 
 if [ $? -eq 0 ]; then
     echo "Task 3 Finished"

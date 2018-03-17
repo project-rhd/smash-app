@@ -1,6 +1,7 @@
 package smash.data.scats.pojo;
 
 import java.io.Serializable;
+import java.text.DateFormat;
 import java.util.Date;
 
 /**
@@ -74,5 +75,10 @@ public class ScatsVolume implements Serializable{
 
   public void setGeoLineString(String geoLineString) {
     this.geoLineString = geoLineString;
+  }
+
+
+  public String toString(DateFormat df) {
+    return nb_scats_site+"#"+nb_detector+"#"+df.format(qt_interval_count)+"#"+day_of_week+"#"+geoPointString+"#"+volume;
   }
 }

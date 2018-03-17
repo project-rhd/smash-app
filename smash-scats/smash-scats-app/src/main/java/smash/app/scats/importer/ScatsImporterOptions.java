@@ -25,4 +25,8 @@ public class ScatsImporterOptions extends GeoMesaOptions {
     usage = "path to lines (road network) shape file for processing")
   public String inputLineShapeFile;
 
+  @Option(name = "--hdfsURL", required = true,
+    usage = "url to hdfs")
+  public String hdfsURL;
+
 }
