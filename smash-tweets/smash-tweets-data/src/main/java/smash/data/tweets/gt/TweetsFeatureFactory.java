@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 
 /**
  * @author Yikai Gong
@@ -40,6 +41,8 @@ public class TweetsFeatureFactory {
   public static final String SENTIMENT = "sentiment";
   public static final String CLUSTER_ID = "cluster_id";
   public static final String CLUSTER_LABEL = "cluster_label";
+  public static final String DAY_OF_WEEK = "day_of_week";
+  public static final String SEC_OF_DAY = "sec_of_day";
 
   public static final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
 
@@ -54,6 +57,8 @@ public class TweetsFeatureFactory {
     attributes.add(SCREEN_NAME + ":String");
     attributes.add(TOKENS + ":String");
     attributes.add(SENTIMENT + ":Integer");
+    attributes.add(DAY_OF_WEEK + ":String:index=join");
+    attributes.add(SEC_OF_DAY + ":Long:index=join");
     attributes.add(CLUSTER_ID + ":String:index=full"); //full;join
     attributes.add(CLUSTER_LABEL + ":String");
 
@@ -82,6 +87,15 @@ public class TweetsFeatureFactory {
     Date created_at = df.parse(tweet.getCreated_at());
     String tokenStr = Tweet.gson.toJson(tweet.getTokens());
 
+    DateFormat df2 = new SimpleDateFormat("EE");
+    df2.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+    String dayOfWeek_Str = df2.format(created_at);
+
+    df2 = new SimpleDateFormat("yyyy-MM-ddZ");
+    df2.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+    Date start_of_day = df.parse(df2.format(created_at));
+    Long sec_of_day = (created_at.getTime()-start_of_day.getTime())/1000;
+
     feature.setDefaultGeometry(point);
     feature.setAttribute(ID_STR, tweet.getId_str());
     feature.setAttribute(CREATED_AT, created_at);
@@ -89,6 +103,8 @@ public class TweetsFeatureFactory {
     feature.setAttribute(SCREEN_NAME, tweet.getUser().getScreen_name());
     feature.setAttribute(TOKENS, tokenStr);
     feature.setAttribute(SENTIMENT, tweet.getSentiment());
+    feature.setAttribute(DAY_OF_WEEK, dayOfWeek_Str);
+    feature.setAttribute(SEC_OF_DAY, sec_of_day);
 
     return feature;
   }
@@ -100,15 +116,15 @@ public class TweetsFeatureFactory {
     Double lon = ((Point) sf.getDefaultGeometry()).getX();
     Double lat = ((Point) sf.getDefaultGeometry()).getY();
     DateFormat df = new SimpleDateFormat(timeFormat);
-    Date date = (Date)sf.getAttribute(CREATED_AT);
-    df.format(date);
+    Date date = (Date) sf.getAttribute(CREATED_AT);
 
     t.setId_str(fid[1]);
     t.setCreated_at(df.format(date));
     t.setText((String) sf.getAttribute(TEXT));
     t.setCoordinates(new TweetCoordinates(lon, lat));
     t.setUser(new TweetUser((String) sf.getAttribute(SCREEN_NAME)));
-    Type listType = new TypeToken<ArrayList<String>>() {}.getType();
+    Type listType = new TypeToken<ArrayList<String>>() {
+    }.getType();
     t.setTokens(Tweet.gson.fromJson((String) sf.getAttribute(TOKENS), listType));
     t.setSentiment((Integer) sf.getAttribute(SENTIMENT));
     return t;
