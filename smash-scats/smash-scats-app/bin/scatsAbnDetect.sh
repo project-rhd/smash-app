@@ -51,7 +51,7 @@ ${client_spark_home}/bin/spark-submit \
 --master spark://${spark_master_address}:6066 \
 --executor-cores 3 \
 --total-executor-cores 18 \
---driver-memory 5G \
+--driver-memory 10G \
 --executor-memory 10G \
 --conf spark.eventLog.enabled=true \
 --class "smash.app.scats.analyzer.ScatsAbnDetector" \

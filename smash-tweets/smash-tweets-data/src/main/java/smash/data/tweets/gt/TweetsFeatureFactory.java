@@ -93,7 +93,7 @@ public class TweetsFeatureFactory {
 
     df2 = new SimpleDateFormat("yyyy-MM-ddZ");
     df2.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
-    Date start_of_day = df.parse(df2.format(created_at));
+    Date start_of_day = df2.parse(df2.format(created_at));
     Long sec_of_day = (created_at.getTime()-start_of_day.getTime())/1000;
 
     feature.setDefaultGeometry(point);

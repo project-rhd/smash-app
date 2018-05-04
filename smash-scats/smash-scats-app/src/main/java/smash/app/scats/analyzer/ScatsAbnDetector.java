@@ -15,11 +15,14 @@ import org.geotools.filter.text.cql2.CQLException;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
 import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
+import org.locationtech.geomesa.utils.csv.DMS;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
+import scala.Tuple3;
+import smash.app.scats.analyzer.entity.ScatsAbnEntity;
 import smash.data.scats.DateStrUtils;
 import smash.data.scats.gt.ScatsDOWFeatureFactory;
 import smash.data.scats.gt.ScatsFeaturePointFactory;
@@ -30,10 +33,13 @@ import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.geomesa.GeoMesaOptions;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.TimeZone;
 import java.util.zip.DataFormatException;
 
@@ -42,10 +48,10 @@ import java.util.zip.DataFormatException;
  * @author Yikai Gong
  */
 
-public class ScatsAbnDetector {
+public class ScatsAbnDetector implements Serializable {
   private static Logger logger = LoggerFactory.getLogger(ScatsAbnDetector.class);
   private SparkConf sparkConf;
-  private static DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+
 
   public ScatsAbnDetector() {
     this.sparkConf = new SparkConf();
@@ -73,13 +79,46 @@ public class ScatsAbnDetector {
   }
 
   private void run(GeoMesaOptions options) throws IOException, CQLException {
+//    try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
+//      JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
+//      SpatialRDDProvider sp = org.locationtech.geomesa.spark.GeoMesaSpark.apply(options.getAccumuloOptions2());
+//      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
+
+    int dayI = 8;
+    int endDay = 14;
+    int[] TF = new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0};
+    while (dayI <= endDay) {
+      int[] TF_i = calculateOneDay(dayI, sparkConf, options);
+      for (int i = 0; i < TF.length; i++) {
+        TF[i] = TF[i] + TF_i[i];
+      }
+      dayI++;
+    }
+
+
+    System.out.println("TT: " + TF[0]);
+    System.out.println("TF: " + TF[1]);
+    System.out.println("FT: " + TF[2]);
+    System.out.println("FF: " + TF[3]);
+    System.out.println("===== Tweets!=0 =====");
+    System.out.println("TT: " + TF[4]);
+    System.out.println("TF: " + TF[5]);
+    System.out.println("FT: " + TF[6]);
+    System.out.println("FF: " + TF[7]);
+//    } //end try
+  }
+
+  public static int[] calculateOneDay(int DayI, SparkConf sparkConf, GeoMesaOptions options) throws CQLException {
+    int[] TF = new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0};
     try (SparkSession ss = SparkSession.builder().config(sparkConf).getOrCreate()) {
       JavaSparkContext sc = JavaSparkContext.fromSparkContext(ss.sparkContext());
+
       SpatialRDDProvider sp = org.locationtech.geomesa.spark.GeoMesaSpark.apply(options.getAccumuloOptions2());
       JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
-
       // Load target SCATS data
-      Filter filter = CQL.toFilter("qt_interval_count during 2017-12-01T00:00:00+11:00/2017-12-31T00:59:59+11:00 AND BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
+      String DayI_str = String.valueOf(DayI);
+      DayI_str = "00".substring(DayI_str.length()) + DayI_str;
+      Filter filter = CQL.toFilter("qt_interval_count during 2017-12-" + DayI_str + "T00:00:00+11:00/2017-12-" + DayI_str + "T12:59:59+11:00 AND BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
       Query query = new Query(ScatsFeaturePointFactory.FT_NAME, filter); //, CQL.toFilter("DAY_OF_WEEK='Tue'")
       JavaRDD<SimpleFeature> featureRDD = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
@@ -99,7 +138,7 @@ public class ScatsAbnDetector {
         String key = Joiner.on("#").join(scv.getNb_scats_site(), scv.getDay_of_week(), timeOfDay);
         return new Tuple2<>(key, scv);
       });
-      pairRdd.persist(StorageLevel.MEMORY_AND_DISK());
+//    pairRdd.persist(StorageLevel.MEMORY_AND_DISK());
 
       // Load SCATS baseline data.
       Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
@@ -116,19 +155,25 @@ public class ScatsAbnDetector {
         Double avg_vol = (Double) sf.getAttribute(ScatsDOWFeatureFactory.AVERAGE_VEHICLE_COUNT);
         return new Tuple2<>(key, avg_vol);
       });
-      pairRdd2.persist(StorageLevel.MEMORY_AND_DISK());
+//    pairRdd2.persist(StorageLevel.MEMORY_AND_DISK());
 
       // Compare target scats to baseline vie join operation
       JavaPairRDD<String, Tuple2<ScatsVolume, Double>> joinedRdd = pairRdd.join(pairRdd2);
-      // Filter out abnormal s=scats record
-      joinedRdd = joinedRdd.filter(pair -> {
+
+
+//      // Filter out abnormal s=scats record
+      JavaPairRDD<String, Tuple2<ScatsVolume, Double>> filteredRDD = joinedRdd.filter(pair -> {
         ScatsVolume scv = pair._2._1;
         Integer vol = scv.getVolume();
         Double avg_vol = pair._2._2;
-        return avg_vol > 0 && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
-      });
+        return avg_vol > 0;// && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
+      }).repartition(100);
 
-      JavaPairRDD<String, Tuple2<ScatsVolume, double[]>> resultRdd = joinedRdd.mapToPair(pair -> {
+//    filteredRDD.persist(StorageLevel.MEMORY_AND_DISK());
+//    pairRdd.unpersist();
+//    pairRdd2.unpersist();
+
+      JavaPairRDD<String, ScatsAbnEntity> resultRdd = filteredRDD.mapToPair(pair -> {
         String key = pair._1;
         ScatsVolume scv = pair._2._1;
         Integer vol = scv.getVolume();
@@ -140,60 +185,102 @@ public class ScatsAbnDetector {
         Date date_end = DateUtils.addSeconds(date, timeDiffSec);
 
         String wktPoint = scv.getGeoPointString();
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         String timePeriod = df.format(date_start) + "/" + df.format(date_end);
         String queryStr = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND created_at DURING " + timePeriod;
-
-        Query query3 = new Query(TweetsFeatureFactory.FT_NAME, CQL.toFilter(queryStr));
-
+        Query query3 = null;
+        try {
+          query3 = new Query(TweetsFeatureFactory.FT_NAME, CQL.toFilter(queryStr));
+        } catch (Exception e) {
+          e.printStackTrace();
+          System.out.println("date: " + df.format(date));
+          System.out.println(queryStr);
+        }
         GeoMesaOptions options1 = options.copy();
         options1.setTableName("tweets");
 
-//        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mmZ");
-//        df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
-//        System.out.println(scv.toString(df));
-//        System.out.println(queryStr);
-        ArrayList<SimpleFeature> features = GeoMesaDataUtils.getFeatures(options1, query3);
-        int numOfTweets = features.size();
+//        ArrayList<SimpleFeature> features = GeoMesaDataUtils.getFeatures(options1, query3);
+        int numOfTweets = GeoMesaDataUtils.getNumOfFeatures(options1, query3);
         int hasCore = 0;
-        for (SimpleFeature sf : features) {
-          if (sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID) != null)
-            hasCore = 1;
-        }
+//        for (SimpleFeature sf : features) {
+//          if (sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID) != null)
+//            hasCore = 1;
+//        }
 
+        Long secOfDay_start = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_start);
+        Long secOfDay_end = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_end);
 
+//      System.out.println("Start: " + date_start + "  " + date_start.getTime());
+//      System.out.println("End: " + date_end + "  " + date_end.getTime());
+//      System.out.println("secOfDay_start: " + secOfDay_start);
+//      System.out.println("secOfDay_end: " + secOfDay_end);
+
+        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end;
+        if (secOfDay_start > secOfDay_end)
+          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end;
+//      else
+//        System.out.println("secOfDay_start < secOfDay_end");
+        Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME, CQL.toFilter(queryStr_baseline));
+        int not = GeoMesaDataUtils.getNumOfFeatures(options1, query_baseline);
+        double tweet_baseline = not / 200d; //200 days of tweets stored in GeoMesa
+//      System.out.println(queryStr_baseline);
+//      if (tweet_baseline>0)
+//        System.out.println(tweet_baseline);
+//        System.out.println(queryStr_baseline + " | " + not + " | " + tweet_baseline);
 //        System.out.println(numOfTweets);
 
+//        double[] result = {(double) vol, avg_vol, (double) numOfTweets, (double) hasCore, tweet_baseline};
 
-        double[] result = {(double) vol, avg_vol, (double) numOfTweets, (double) hasCore};
-        return new Tuple2<>(key, new Tuple2<>(scv, result));
+        ScatsAbnEntity entity = new ScatsAbnEntity(false, false);
+        if (avg_vol > 0 && ((vol > 10 * avg_vol) || (vol < avg_vol / 10)))
+          entity.setScatsAbn(true);
+        if (numOfTweets > 2 * tweet_baseline)
+          entity.setTweetsAbn(true);
+        if (hasCore == 1)
+          entity.setTweetCluster(true);
+        if (numOfTweets == 0)
+          entity.setTweetEqZero(true);
+        return new Tuple2<>(key, entity);
       });
+//    resultRdd.persist(StorageLevel.MEMORY_AND_DISK());
+      // TT TF FT FF  (SCATS-abn/TWEET-abn) + tweets!=0
+      TF = resultRdd.aggregate(new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0}, (r, tuple) -> {
+        ScatsAbnEntity e = tuple._2;
+        if (e.getScatsAbn() && e.getTweetsAbn())
+          r[0] = r[0] + 1;
+        else if (e.getScatsAbn() && !e.getTweetsAbn())
+          r[1] = r[1] + 1;
+        else if (!e.getScatsAbn() && e.getTweetsAbn())
+          r[2] = r[2] + 1;
+        else if (!e.getScatsAbn() && !e.getTweetsAbn())
+          r[3] = r[3] + 1;
 
-      resultRdd.collect().forEach(pair -> {
-        ScatsVolume scv = pair._2._1;
-        double[] result = pair._2._2;
-        double vol = result[0];
-        double avg_vol = result[1];
-        double numOfTweets = result[2];
-        boolean hasCore = result[3] == 1d;
-        String key = pair._1;
-        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mmZ");
-        df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
-        if (numOfTweets > 0d)
-          System.out.println(scv.toString(df) + " : " + vol + " : " + avg_vol + " : " + numOfTweets + " : " + hasCore);
+        if (!e.getTweetEqZero()) {
+          if (e.getScatsAbn() && e.getTweetsAbn())
+            r[4] = r[4] + 1;
+          else if (e.getScatsAbn() && !e.getTweetsAbn())
+            r[5] = r[5] + 1;
+          else if (!e.getScatsAbn() && e.getTweetsAbn())
+            r[6] = r[6] + 1;
+          else if (!e.getScatsAbn() && !e.getTweetsAbn())
+            r[7] = r[7] + 1;
+        }
+        return r;
+      }, (r1, r2) -> {
+        for (int i = 0; i < r1.length; i++) {
+          r1[i] = r1[i] + r2[i];
+        }
+        return r1;
       });
-      System.out.println("Total results: " + resultRdd.count());
-
-//      // Testing code
-//      joinedRdd.takeSample(false, 100).forEach(pair->{
-//        ScatsVolume scv = pair._2._1;
-//        Integer vol = scv.getVolume();
-//        Double avg_vol = pair._2._2;
-//        String key = pair._1;
-//        System.out.println(key + " : " + vol + " : " + avg_vol);
-//      });
-//      System.out.println("Total results: " +  joinedRdd.count());
-
-
     }
+    return TF;
+  }
+
+  public static Long getSecOfDay(TimeZone tz, Date date) throws ParseException {
+    SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-ddZ");
+    df.setTimeZone(tz);
+    Date start_of_day = df.parse(df.format(date));
+    Long sec_of_day = (date.getTime() - start_of_day.getTime()) / 1000;
+    return sec_of_day;
   }
 }

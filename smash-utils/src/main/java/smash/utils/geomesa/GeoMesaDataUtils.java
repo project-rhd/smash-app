@@ -1,19 +1,20 @@
 package smash.utils.geomesa;
 
 import com.google.common.collect.Lists;
-import org.geotools.data.DataStore;
-import org.geotools.data.DataStoreFinder;
-import org.geotools.data.Query;
+import org.geotools.data.*;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
+import org.geotools.data.simple.SimpleFeatureReader;
 import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.locationtech.geomesa.index.conf.QueryHints;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.NoSuchElementException;
 
 /**
  * @author Yikai Gong
@@ -61,6 +62,7 @@ public class GeoMesaDataUtils {
   public static ArrayList<SimpleFeature> getFeatures(GeoMesaOptions options, Query query) throws IOException {
     ArrayList<SimpleFeature> list = new ArrayList<>();
     DataStore dataStore = DataStoreFinder.getDataStore(options.getAccumuloOptions());
+//    FeatureReader<SimpleFeatureType, SimpleFeature> reader = dataStore.getFeatureReader(query, Transaction.);
     SimpleFeatureSource dataSource = dataStore.getFeatureSource(query.getTypeName());
     SimpleFeatureIterator itr = dataSource.getFeatures(query).features();
     try {
@@ -71,6 +73,33 @@ public class GeoMesaDataUtils {
     } finally {
       itr.close();
     }
+    dataStore = null;
+    dataSource = null;
+    itr = null;
+//    System.gc();
     return list;
+  }
+
+  public static int getNumOfFeatures(GeoMesaOptions options, Query query) throws IOException {
+    query.getHints().put(QueryHints.EXACT_COUNT(), Boolean.TRUE);
+    DataStore dataStore = DataStoreFinder.getDataStore(options.getAccumuloOptions());
+//    FeatureReader<SimpleFeatureType, SimpleFeature> reader = dataStore.getFeatureReader(query, Transaction.AUTO_COMMIT);
+    SimpleFeatureSource dataSource = dataStore.getFeatureSource(query.getTypeName());
+    int count = 0;
+    try{
+      count = dataSource.getCount(query);
+    } catch (NoSuchElementException e){
+      e.printStackTrace();
+    }
+    if (count<0)
+      count = 0;
+//    SimpleFeatureIterator itr = dataSource.getFeatures(query).features();
+//    while(itr.hasNext()){
+//      itr.next();
+//      count++;
+//    }
+//    itr.close();
+    return count;
+//    return dataSource.getCount(query);
   }
 }
