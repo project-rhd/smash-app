@@ -13,6 +13,7 @@ import org.geotools.data.Query;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.kohsuke.args4j.CmdLineException;
+import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
 import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
 import org.locationtech.geomesa.utils.csv.DMS;
@@ -37,10 +38,7 @@ import java.io.Serializable;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.zip.DataFormatException;
 
 
@@ -54,15 +52,16 @@ public class ScatsAbnDetector implements Serializable {
 
 
   public ScatsAbnDetector() {
-    this.sparkConf = new SparkConf();
+    this(new SparkConf());
   }
 
   public ScatsAbnDetector(SparkConf sparkConf) {
-    this.sparkConf = sparkConf.setAppName(this.getClass().getSimpleName());
-    this.sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
-    this.sparkConf = sparkConf;
+    sparkConf.setAppName(this.getClass().getSimpleName());
+    sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
+    sparkConf.set("spark.kryo.registrator", GeoMesaSparkKryoRegistrator.class.getName());
     Class[] classes = new Class[]{ScatsVolume.class};
-    this.sparkConf.registerKryoClasses(classes);
+    sparkConf.registerKryoClasses(classes);
+    this.sparkConf = sparkConf;
   }
 
   public static void main(String[] args)
@@ -84,17 +83,17 @@ public class ScatsAbnDetector implements Serializable {
 //      SpatialRDDProvider sp = org.locationtech.geomesa.spark.GeoMesaSpark.apply(options.getAccumuloOptions2());
 //      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
 
-    int dayI = 8;
-    int endDay = 14;
+    int dayI = 22;
+    int endDay = 28;
     int[] TF = new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0};
     while (dayI <= endDay) {
       int[] TF_i = calculateOneDay(dayI, sparkConf, options);
+      System.out.println(Integer.toString(dayI) + ": " + Arrays.toString(TF_i));
       for (int i = 0; i < TF.length; i++) {
         TF[i] = TF[i] + TF_i[i];
       }
       dayI++;
     }
-
 
     System.out.println("TT: " + TF[0]);
     System.out.println("TF: " + TF[1]);
@@ -118,12 +117,13 @@ public class ScatsAbnDetector implements Serializable {
       // Load target SCATS data
       String DayI_str = String.valueOf(DayI);
       DayI_str = "00".substring(DayI_str.length()) + DayI_str;
-      Filter filter = CQL.toFilter("qt_interval_count during 2017-12-" + DayI_str + "T00:00:00+11:00/2017-12-" + DayI_str + "T12:59:59+11:00 AND BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
+      Filter filter = CQL.toFilter("qt_interval_count during 2017-12-" + DayI_str + "T00:00:00+11:00/2017-12-" + DayI_str + "T23:59:59+11:00 AND BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
       Query query = new Query(ScatsFeaturePointFactory.FT_NAME, filter); //, CQL.toFilter("DAY_OF_WEEK='Tue'")
-      JavaRDD<SimpleFeature> featureRDD = jsp
-        .rdd(new Configuration(), sc, options.getAccumuloOptions(), query);
 
-      JavaPairRDD<String, ScatsVolume> pairRdd = featureRDD.mapToPair(sf -> {
+      JavaPairRDD<String, ScatsVolume> pairRdd = jsp
+        .rdd(new Configuration(), sc, options.getAccumuloOptions(), query)
+        .repartition(12)
+        .mapToPair(sf -> {
         ScatsVolume scatsVolume = ScatsFeaturePointFactory.fromSFtoPojo(sf);
         String key = scatsVolume.getNb_scats_site() + "#" + scatsVolume.getQt_interval_count();
         return new Tuple2<>(key, scatsVolume);
@@ -143,10 +143,10 @@ public class ScatsAbnDetector implements Serializable {
       // Load SCATS baseline data.
       Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
       Query query2 = new Query(ScatsDOWFeatureFactory.FT_NAME, filter2);
-      JavaRDD<SimpleFeature> baseLineFeatureRDD = jsp
-        .rdd(new Configuration(), sc, options.getAccumuloOptions(), query2);
-
-      JavaPairRDD<String, Double> pairRdd2 = baseLineFeatureRDD.mapToPair(sf -> {
+      JavaPairRDD<String, Double> pairRdd2 = jsp
+        .rdd(new Configuration(), sc, options.getAccumuloOptions(), query2)
+        .repartition(12)
+        .mapToPair(sf -> {
         String scats_site = (String) sf.getAttribute(ScatsDOWFeatureFactory.NB_SCATS_SITE);
         String day_of_week = (String) sf.getAttribute(ScatsDOWFeatureFactory.DAY_OF_WEEK);
         Date timeOfDay_date = (Date) sf.getAttribute(ScatsDOWFeatureFactory.TIME_OF_DAY);
@@ -158,22 +158,19 @@ public class ScatsAbnDetector implements Serializable {
 //    pairRdd2.persist(StorageLevel.MEMORY_AND_DISK());
 
       // Compare target scats to baseline vie join operation
-      JavaPairRDD<String, Tuple2<ScatsVolume, Double>> joinedRdd = pairRdd.join(pairRdd2);
-
-
-//      // Filter out abnormal s=scats record
-      JavaPairRDD<String, Tuple2<ScatsVolume, Double>> filteredRDD = joinedRdd.filter(pair -> {
-        ScatsVolume scv = pair._2._1;
-        Integer vol = scv.getVolume();
+      JavaPairRDD<String, Tuple2<ScatsVolume, Double>> joinedRdd = pairRdd.join(pairRdd2)
+        .filter(pair -> {                 // Filter out abnormal s=scats record
+          ScatsVolume scv = pair._2._1;
+//        Integer vol = scv.getVolume();
         Double avg_vol = pair._2._2;
         return avg_vol > 0;// && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
-      }).repartition(100);
+      }).repartition(200);
 
 //    filteredRDD.persist(StorageLevel.MEMORY_AND_DISK());
 //    pairRdd.unpersist();
 //    pairRdd2.unpersist();
 
-      JavaPairRDD<String, ScatsAbnEntity> resultRdd = filteredRDD.mapToPair(pair -> {
+      JavaPairRDD<String, ScatsAbnEntity> resultRdd = joinedRdd.mapToPair(pair -> {
         String key = pair._1;
         ScatsVolume scv = pair._2._1;
         Integer vol = scv.getVolume();
@@ -187,10 +184,10 @@ public class ScatsAbnDetector implements Serializable {
         String wktPoint = scv.getGeoPointString();
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         String timePeriod = df.format(date_start) + "/" + df.format(date_end);
-        String queryStr = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND created_at DURING " + timePeriod;
+        String queryStr = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND created_at DURING " + timePeriod + " AND on_street=true";
         Query query3 = null;
         try {
-          query3 = new Query(TweetsFeatureFactory.FT_NAME, CQL.toFilter(queryStr));
+          query3 = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr));
         } catch (Exception e) {
           e.printStackTrace();
           System.out.println("date: " + df.format(date));
@@ -215,12 +212,12 @@ public class ScatsAbnDetector implements Serializable {
 //      System.out.println("secOfDay_start: " + secOfDay_start);
 //      System.out.println("secOfDay_end: " + secOfDay_end);
 
-        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end;
+        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end + " AND on_street=true";
         if (secOfDay_start > secOfDay_end)
-          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end;
+          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end + " AND on_street=true";
 //      else
 //        System.out.println("secOfDay_start < secOfDay_end");
-        Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME, CQL.toFilter(queryStr_baseline));
+        Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr_baseline));
         int not = GeoMesaDataUtils.getNumOfFeatures(options1, query_baseline);
         double tweet_baseline = not / 200d; //200 days of tweets stored in GeoMesa
 //      System.out.println(queryStr_baseline);

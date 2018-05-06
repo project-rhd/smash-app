@@ -31,6 +31,7 @@ import java.util.TimeZone;
 
 public class TweetsFeatureFactory {
   public static final String FT_NAME = "Tweet";
+  public static final String FT_NAME_OS = "Tweet_OS";
   // Attributes fields
   public static final String GEOMETRY = "geometry";
   public static final String ID_STR = "id_str";
@@ -43,10 +44,12 @@ public class TweetsFeatureFactory {
   public static final String CLUSTER_LABEL = "cluster_label";
   public static final String DAY_OF_WEEK = "day_of_week";
   public static final String SEC_OF_DAY = "sec_of_day";
+  public static final String ON_STREET = "on_street";
 
   public static final String timeFormat = "EEE MMM dd HH:mm:ss Z yyyy";
 
   public static SimpleFeatureType SFT = createFeatureType();
+  public static SimpleFeatureType SFT_OS = createOnStFeatureType();
 
   public static SimpleFeatureType createFeatureType() {
     List<String> attributes = new ArrayList<>();
@@ -65,6 +68,29 @@ public class TweetsFeatureFactory {
     String simpleFeatureTypeSchema = Joiner.on(",").join(attributes);
     SimpleFeatureType simpleFeatureType =
       SimpleFeatureTypes.createType(FT_NAME, simpleFeatureTypeSchema);
+    simpleFeatureType.getUserData()
+      .put(SimpleFeatureTypes.DEFAULT_DATE_KEY, CREATED_AT);
+    return simpleFeatureType;
+  }
+
+  public static SimpleFeatureType createOnStFeatureType() {
+    List<String> attributes = new ArrayList<>();
+    attributes.add("*" + GEOMETRY + ":Point:srid=4326");
+    attributes.add(ID_STR + ":String:index=join");
+    attributes.add(CREATED_AT + ":Date");
+    attributes.add(TEXT + ":String");
+    attributes.add(SCREEN_NAME + ":String");
+    attributes.add(TOKENS + ":String");
+    attributes.add(SENTIMENT + ":Integer");
+    attributes.add(DAY_OF_WEEK + ":String:index=join");
+    attributes.add(SEC_OF_DAY + ":Long:index=join");
+    attributes.add(CLUSTER_ID + ":String:index=full"); //full;join
+    attributes.add(CLUSTER_LABEL + ":String");
+    attributes.add(ON_STREET + ":Boolean:index=full");
+
+    String simpleFeatureTypeSchema = Joiner.on(",").join(attributes);
+    SimpleFeatureType simpleFeatureType =
+      SimpleFeatureTypes.createType(FT_NAME_OS, simpleFeatureTypeSchema);
     simpleFeatureType.getUserData()
       .put(SimpleFeatureTypes.DEFAULT_DATE_KEY, CREATED_AT);
     return simpleFeatureType;
@@ -105,6 +131,46 @@ public class TweetsFeatureFactory {
     feature.setAttribute(SENTIMENT, tweet.getSentiment());
     feature.setAttribute(DAY_OF_WEEK, dayOfWeek_Str);
     feature.setAttribute(SEC_OF_DAY, sec_of_day);
+
+    return feature;
+  }
+
+  public static SimpleFeature createOnStreetFeature(Tweet tweet, boolean isOnSt) throws ParseException {
+    SimpleFeatureBuilder builder = new SimpleFeatureBuilder(SFT_OS);
+    SimpleFeature feature = builder.buildFeature("tweet-" + tweet.getId_str());
+    // Tell GeoMesa to use user provided FID
+    feature.getUserData().put(Hints.USE_PROVIDED_FID, Boolean.TRUE);
+    GeometryFactory geometryFactory =
+      new GeometryFactory(new PrecisionModel(), 4326);
+    // lon-lat order
+    Double lon = tweet.getCoordinates().getLon().doubleValue();
+    Double lat = tweet.getCoordinates().getLat().doubleValue();
+    Coordinate coordinate = new Coordinate(lon, lat);
+    Point point = geometryFactory.createPoint(coordinate);
+    // Note: SimpleDateFormat is not thread-safe
+    DateFormat df = new SimpleDateFormat(timeFormat);
+    Date created_at = df.parse(tweet.getCreated_at());
+    String tokenStr = Tweet.gson.toJson(tweet.getTokens());
+
+    DateFormat df2 = new SimpleDateFormat("EE");
+    df2.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+    String dayOfWeek_Str = df2.format(created_at);
+
+    df2 = new SimpleDateFormat("yyyy-MM-ddZ");
+    df2.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+    Date start_of_day = df2.parse(df2.format(created_at));
+    Long sec_of_day = (created_at.getTime()-start_of_day.getTime())/1000;
+
+    feature.setDefaultGeometry(point);
+    feature.setAttribute(ID_STR, tweet.getId_str());
+    feature.setAttribute(CREATED_AT, created_at);
+    feature.setAttribute(TEXT, tweet.getText());
+    feature.setAttribute(SCREEN_NAME, tweet.getUser().getScreen_name());
+    feature.setAttribute(TOKENS, tokenStr);
+    feature.setAttribute(SENTIMENT, tweet.getSentiment());
+    feature.setAttribute(DAY_OF_WEEK, dayOfWeek_Str);
+    feature.setAttribute(SEC_OF_DAY, sec_of_day);
+    feature.setAttribute(ON_STREET, isOnSt);
 
     return feature;
   }
