@@ -18,6 +18,13 @@
       <artifactId>smash-tweets-data</artifactId>
       <version>0.1.0</version>
     </dependency>
+
+    <dependency>
+      <groupId>smash</groupId>
+      <artifactId>smash-scats-data</artifactId>
+      <version>0.1.0</version>
+    </dependency>
+
     <dependency>
       <groupId>smash</groupId>
       <artifactId>smash-utils</artifactId>
@@ -33,6 +40,7 @@
       <groupId>edu.stanford.nlp</groupId>
       <artifactId>stanford-corenlp</artifactId>
       <version>3.7.0</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>edu.stanford.nlp</groupId>

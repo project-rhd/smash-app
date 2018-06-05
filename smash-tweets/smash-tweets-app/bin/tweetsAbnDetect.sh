@@ -7,7 +7,7 @@ spark_master_address=smash-1-master
 # Ip address of hadoop master. (the name node)
 hadoop_master_address=smash-1-master
 # Directory in hdfs for placing jar. e.g. /scats
-jar_hdfs_dir=/scats
+jar_hdfs_dir=/tweets
 
 # Local Spark home directory e.g. /usr/local/spark
 client_spark_home=/home/darcular/Applications/spark-2.1.1-bin-hadoop2.6
@@ -15,20 +15,21 @@ client_spark_home=/home/darcular/Applications/spark-2.1.1-bin-hadoop2.6
 client_hadoop_home=/home/darcular/Applications/hadoop-2.6.0
 
 accumulo_instance_id=smash
+# smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181
 zookeepers=smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181,smash-3-slave:2181,smash-4-slave:2181,smash-5-slave:2181,smash-6-slave:2181,smash-7-slave:2181
 accumulo_user_name=root
 accumulo_user_pwd=smash
-accumulo_table_name=scats_2017
+accumulo_table_name=tweets
 
-jar_name=smash-scats-app-0.1.0.jar
+jar_name=smash-tweets-app-0.1.0.jar
+
 
 #======= Primary Settings End ================================
-
 app_base=$(dirname $(readlink -f $0))/../
 hdfs_root=hdfs://${hadoop_master_address}:9000
 
 echo "Task 1: Build application jar locally"
-mvn -f ${app_base}/../../pom.xml -pl smash-scats/smash-scats-app clean package -am -DskipTests
+mvn -f ${app_base}/../../pom.xml -pl smash-tweets/smash-tweets-app clean install -am -DskipTests
 if [ $? -eq 0 ]; then
     echo "Task 1 Finished"
 else
@@ -54,7 +55,7 @@ ${client_spark_home}/bin/spark-submit \
 --driver-memory 5G \
 --executor-memory 8G \
 --conf spark.eventLog.enabled=true \
---class "smash.app.scats.analyzer.ScatsAbnDetector" \
+--class "smash.app.tweets.analyzer.TweetsAbnDetector" \
 ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --instanceId ${accumulo_instance_id} \
 --zookeepers ${zookeepers} \
@@ -62,6 +63,7 @@ ${hdfs_root}${jar_hdfs_dir}/${jar_name} \
 --password ${accumulo_user_pwd} \
 --tableName ${accumulo_table_name} \
 --overwrite
+
 
 if [ $? -eq 0 ]; then
     echo "Task 3 Finished"

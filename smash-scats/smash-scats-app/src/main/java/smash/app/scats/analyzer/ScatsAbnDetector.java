@@ -83,8 +83,8 @@ public class ScatsAbnDetector implements Serializable {
 //      SpatialRDDProvider sp = org.locationtech.geomesa.spark.GeoMesaSpark.apply(options.getAccumuloOptions2());
 //      JavaSpatialRDDProvider jsp = new JavaSpatialRDDProvider(sp);
 
-    int dayI = 22;
-    int endDay = 28;
+    int dayI = 1;
+    int endDay = 7;
     int[] TF = new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0};
     while (dayI <= endDay) {
       int[] TF_i = calculateOneDay(dayI, sparkConf, options);
@@ -176,7 +176,7 @@ public class ScatsAbnDetector implements Serializable {
         Integer vol = scv.getVolume();
         Double avg_vol = pair._2._2;
         Date date = scv.getQt_interval_count();
-        int timeDiffSec = 3600; //849
+        int timeDiffSec = 7200; //849  3600
         int distDiffMet = 1000;  //142
         Date date_start = DateUtils.addSeconds(date, -timeDiffSec);
         Date date_end = DateUtils.addSeconds(date, timeDiffSec);
@@ -184,7 +184,7 @@ public class ScatsAbnDetector implements Serializable {
         String wktPoint = scv.getGeoPointString();
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         String timePeriod = df.format(date_start) + "/" + df.format(date_end);
-        String queryStr = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND created_at DURING " + timePeriod + " AND on_street=true";
+        String queryStr = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND created_at DURING " + timePeriod; // + " AND on_street=true";
         Query query3 = null;
         try {
           query3 = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr));
@@ -212,9 +212,9 @@ public class ScatsAbnDetector implements Serializable {
 //      System.out.println("secOfDay_start: " + secOfDay_start);
 //      System.out.println("secOfDay_end: " + secOfDay_end);
 
-        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end + " AND on_street=true";
+        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end; // + " AND on_street=true";
         if (secOfDay_start > secOfDay_end)
-          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end + " AND on_street=true";
+          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end; // + " AND on_street=true";
 //      else
 //        System.out.println("secOfDay_start < secOfDay_end");
         Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr_baseline));
@@ -237,6 +237,11 @@ public class ScatsAbnDetector implements Serializable {
           entity.setTweetCluster(true);
         if (numOfTweets == 0)
           entity.setTweetEqZero(true);
+
+//        if(entity.getScatsAbn() && entity.getTweetsAbn()){
+//          System.out.println("TT detected at: " + key + "\n" + "vol: " + vol + " avg_vol: " + avg_vol + "\n" +
+//          "numOfTweets: " + numOfTweets + " avg_tweets: " + tweet_baseline + "\n" + queryStr);
+//        }
         return new Tuple2<>(key, entity);
       });
 //    resultRdd.persist(StorageLevel.MEMORY_AND_DISK());
