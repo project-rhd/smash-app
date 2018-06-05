@@ -6,6 +6,7 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore;
 import org.locationtech.geomesa.index.geotools.GeoMesaFeatureStore;
+import org.locationtech.geomesa.index.geotools.GeoMesaFeatureWriter.FlushableFeatureWriter;
 import org.locationtech.geomesa.utils.geotools.FeatureUtils;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
@@ -28,7 +29,7 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
 
   private final Object locker = new Object();
   private GeoMesaFeatureStore geoMesaFeatureStore = null;
-  private org.locationtech.geomesa.index.geotools.GeoMesaFeatureWriter geoMesaFeatureWriter = null;
+  private FlushableFeatureWriter geoMesaFeatureWriter = null;
 
   public static GeoMesaWriter getThreadSingleton(GeoMesaOptions op, String tn)
     throws IOException {
@@ -114,7 +115,11 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
    */
   public void flush() {
     if (geoMesaFeatureWriter != null) {
-      geoMesaFeatureWriter.flush();
+      try {
+        geoMesaFeatureWriter.flush();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
   }
 
@@ -124,7 +129,11 @@ public class GeoMesaWriter implements StreamTaskWriter<SimpleFeature> {
   public void close() {
     synchronized (this.locker) {
       if (geoMesaFeatureWriter != null) {
-        geoMesaFeatureWriter.close();
+        try {
+          geoMesaFeatureWriter.close();
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
         geoMesaFeatureWriter = null;
         geoMesaFeatureStore = null;
         if(logger.isDebugEnabled())
