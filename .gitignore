@@ -8,5 +8,6 @@ dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
 
-#*bin/*.sh
-*/bin/*.sh
+*bin/*.sh
+*/*/bin/*.sh
+
