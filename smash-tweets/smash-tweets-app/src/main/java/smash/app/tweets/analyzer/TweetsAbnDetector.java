@@ -1,8 +1,6 @@
 package smash.app.tweets.analyzer;
 
 import com.google.common.base.Joiner;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.Strings;
@@ -13,7 +11,6 @@ import org.apache.spark.sql.SparkSession;
 import org.geotools.data.Query;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
-import org.geotools.geometry.jts.JTSFactoryFinder;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
@@ -124,7 +121,7 @@ public class TweetsAbnDetector {
         .filter(pair -> {
           double[] geoAry = pair._2._1;
           double counter = geoAry[2];
-          return counter > 10;
+          return counter > 0;
         })
         //end fixme
 
@@ -147,7 +144,7 @@ public class TweetsAbnDetector {
         String periodStr = df.format(new Date(dateAry[0] - 1000)) + "/" + df.format(new Date(dateAry[1] + 1000));
 
         String point_wkt = "POINT (" + geoAry[0] + " " + geoAry[1] + ")";
-        int distDiffMet = 1000;
+        int distDiffMet = 1500;
         Filter filter1 = CQL.toFilter("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
 //        System.out.println("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
         Query query1 = new Query(ScatsFeaturePointFactory.FT_NAME, filter1);
@@ -201,14 +198,32 @@ public class TweetsAbnDetector {
           Double avg_vol = pair._2._2;
           return avg_vol > 0;// && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
         });
-      JavaPairRDD<String, Boolean> cid_abn_pair = joinedRdd.mapToPair(pair -> {
-        Boolean abn = false;
-        String clusterId = pair._2._1._2;
-        Double avg_vol = pair._2._2;
+      // Merge area volumes before comparison
+      JavaPairRDD<String, Tuple2<Integer, Double>> areaRdd = joinedRdd.mapToPair(pair->{
         ScatsVolume scv = pair._2._1._1;
         Integer vol = scv.getVolume();
-        if (avg_vol > 0 && ((vol > 10 * avg_vol) || (vol < avg_vol / 10)))
+        String clusterId = pair._2._1._2;
+        Double avg_vol = pair._2._2;
+        return new Tuple2<>(clusterId, new Tuple2<>(vol, avg_vol));
+      }).reduceByKey((t1, t2)->{
+        Integer vol_sum = t1._1 + t2._1;
+        Double avg_sum = t1._2 + t2._2;
+        return new Tuple2<>(vol_sum, avg_sum);
+      });
+      // End merge
+      JavaPairRDD<String, Boolean> cid_abn_pair = areaRdd.mapToPair(pair -> {
+        Boolean abn = false;
+        String clusterId = pair._1;
+        Integer vol_sum = pair._2._1;
+        Double avg_sum = pair._2._2;
+        if (vol_sum > avg_sum)
           abn = true;
+//        String clusterId = pair._2._1._2;
+//        Double avg_vol = pair._2._2;
+//        ScatsVolume scv = pair._2._1._1;
+//        Integer vol = scv.getVolume();
+//        if (avg_vol > 0 && ((vol > 10 * avg_vol) || (vol < avg_vol / 10)))
+//          abn = true;
         return new Tuple2<>(clusterId, abn);
       });
 
