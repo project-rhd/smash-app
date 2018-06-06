@@ -10,9 +10,9 @@ hadoop_master_address=smash-1-master
 jar_hdfs_dir=/scats
 
 # Local Spark home directory e.g. /usr/local/spark
-client_spark_home=/home/darcular/Applications/spark-2.1.1-bin-hadoop2.6
+client_spark_home=~/Applications/spark-2.1.1-bin-hadoop2.6
 # Local Hadoop home e.g. /usrl/local/hadoop
-client_hadoop_home=/home/darcular/Applications/hadoop-2.6.0
+client_hadoop_home=~/Applications/hadoop-2.6.0
 
 accumulo_instance_id=smash
 zookeepers=smash-1-master:2181,smash-1-slave:2181,smash-2-slave:2181,smash-3-slave:2181,smash-4-slave:2181,smash-5-slave:2181,smash-6-slave:2181,smash-7-slave:2181
