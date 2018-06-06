@@ -218,12 +218,7 @@ public class TweetsAbnDetector {
         Double avg_sum = pair._2._2;
         if (vol_sum > avg_sum)
           abn = true;
-//        String clusterId = pair._2._1._2;
-//        Double avg_vol = pair._2._2;
-//        ScatsVolume scv = pair._2._1._1;
-//        Integer vol = scv.getVolume();
-//        if (avg_vol > 0 && ((vol > 10 * avg_vol) || (vol < avg_vol / 10)))
-//          abn = true;
+
         return new Tuple2<>(clusterId, abn);
       });
 

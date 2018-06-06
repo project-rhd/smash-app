@@ -16,8 +16,7 @@ import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
 import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
-import org.locationtech.geomesa.utils.csv.DMS;
-import org.opengis.feature.simple.SimpleFeature;
+
 import org.opengis.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
