@@ -23,7 +23,6 @@ import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.filter.text.ecql.ECQL;
 import org.geotools.geometry.jts.ReferencedEnvelope3D;
-import org.joda.time.DateTime;
 import org.kohsuke.args4j.CmdLineException;
 import org.locationtech.geomesa.spark.GeoMesaSpark;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
@@ -48,6 +47,8 @@ import smash.utils.streamTasks.ml.spatioTemporal.DbscanTask;
 import smash.utils.streamTasks.ml.spatioTemporal.STObj;
 
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -181,9 +182,10 @@ public class TweetsStreamCluster {
       Date queryEndTime = new Date(reducedBorderPoints.get(1).getTimestamp().getTime() + timeMinDis);
       Filter filter = null;
       try {
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         filter = CQL.toFilter("created_at DURING " +
-          (new DateTime(queryStartTime)).toString() + "/" +
-          (new DateTime(queryEndTime)).toString()
+          df.format(queryStartTime) + "/" +
+          df.format(queryEndTime)
         );
       } catch (CQLException e) {
         logger.warn(e.getMessage());
