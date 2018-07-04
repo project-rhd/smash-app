@@ -34,6 +34,9 @@ public class ScatsDOWFeatureFactory {
   public static final String TIME_OF_DAY = "time_of_day";
   public static final String AVERAGE_VEHICLE_COUNT = "average_vehicle_count";
   public static final String NUM_OF_FEATURES = "num_of_features";
+  public static final String STANDARD_DEVIATION = "st_div";
+  public static final String MINIMUM_VOLUME = "min_vol";
+  public static final String MAXIMUM_VOLUME = "max_vol";
 
   public static SimpleFeatureType createFeatureType() {
     List<String> attributes = new ArrayList<>();
@@ -43,6 +46,9 @@ public class ScatsDOWFeatureFactory {
     attributes.add(DAY_OF_WEEK + ":String:index=full");     //indexed
     attributes.add(TIME_OF_DAY + ":Date");     //indexed
     attributes.add(AVERAGE_VEHICLE_COUNT + ":Double");
+    attributes.add(STANDARD_DEVIATION + ":Double");
+    attributes.add(MINIMUM_VOLUME + ":Double");
+    attributes.add(MAXIMUM_VOLUME + ":Double");
     attributes.add(NUM_OF_FEATURES + ":Integer");
     attributes.add("unique_road:MultiLineString:srid=4326");
 
@@ -96,6 +102,11 @@ public class ScatsDOWFeatureFactory {
     simpleFeature.setAttribute(TIME_OF_DAY, timeOfDay_date);
     simpleFeature.setAttribute(AVERAGE_VEHICLE_COUNT, tuple._2[0]);
     simpleFeature.setAttribute(NUM_OF_FEATURES, tuple._2[1]);
+    if (tuple._2.length>4){
+      simpleFeature.setAttribute(STANDARD_DEVIATION, tuple._2[2]);
+      simpleFeature.setAttribute(MINIMUM_VOLUME, tuple._2[3]);
+      simpleFeature.setAttribute(MAXIMUM_VOLUME, tuple._2[4]);
+    }
     simpleFeature.setAttribute("unique_road", line);
 
 
