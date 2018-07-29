@@ -83,6 +83,7 @@ public class GeoMesaDataUtils {
   public static int getNumOfFeatures(GeoMesaOptions options, Query query) throws IOException {
     query.getHints().put(QueryHints.EXACT_COUNT(), Boolean.TRUE);
     DataStore dataStore = DataStoreFinder.getDataStore(options.getAccumuloOptions());
+
 //    FeatureReader<SimpleFeatureType, SimpleFeature> reader = dataStore.getFeatureReader(query, Transaction.AUTO_COMMIT);
     SimpleFeatureSource dataSource = dataStore.getFeatureSource(query.getTypeName());
     int count = 0;
@@ -93,12 +94,22 @@ public class GeoMesaDataUtils {
     }
     if (count<0)
       count = 0;
-//    SimpleFeatureIterator itr = dataSource.getFeatures(query).features();
-//    while(itr.hasNext()){
-//      itr.next();
-//      count++;
-//    }
-//    itr.close();
+
+    return count;
+//    return dataSource.getCount(query);
+  }
+
+  public static int getNumOfFeatures(SimpleFeatureSource dataSource, Query query) throws IOException {
+    query.getHints().put(QueryHints.EXACT_COUNT(), Boolean.TRUE);
+    int count = 0;
+    try{
+      count = dataSource.getCount(query);
+    } catch (NoSuchElementException e){
+      e.printStackTrace();
+    }
+    if (count<0)
+      count = 0;
+
     return count;
 //    return dataSource.getCount(query);
   }

@@ -17,6 +17,7 @@ import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
 import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
 
+import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,7 @@ import smash.app.scats.analyzer.entity.ScatsAbnEntity;
 import smash.data.scats.DateStrUtils;
 import smash.data.scats.gt.ScatsDOWFeatureFactory;
 import smash.data.scats.gt.ScatsFeaturePointFactory;
+import smash.data.scats.gt.ScatsNearByFeatureFactory;
 import smash.data.scats.pojo.ScatsVolume;
 import smash.data.tweets.gt.TweetsFeatureFactory;
 import smash.utils.JobTimer;
@@ -123,63 +125,66 @@ public class ScatsAbnDetector implements Serializable {
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query)
         .repartition(12)
         .mapToPair(sf -> {
-        ScatsVolume scatsVolume = ScatsFeaturePointFactory.fromSFtoPojo(sf);
-        String key = scatsVolume.getNb_scats_site() + "#" + scatsVolume.getQt_interval_count();
-        return new Tuple2<>(key, scatsVolume);
-      }).reduceByKey((scv1, scv2) -> {
-        scv1.setNb_detector("all");
-        Integer sum = scv1.getVolume() + scv2.getVolume();
-        scv1.setVolume(sum);
-        return scv1;
-      }).mapToPair(pair -> {
-        ScatsVolume scv = pair._2;
-        String timeOfDay = DateStrUtils.getAusTimeOfDay(scv.getQt_interval_count());
-        String key = Joiner.on("#").join(scv.getNb_scats_site(), scv.getDay_of_week(), timeOfDay);
-        return new Tuple2<>(key, scv);
-      });
+          ScatsVolume scatsVolume = ScatsFeaturePointFactory.fromSFtoPojo(sf);
+          String key = scatsVolume.getNb_scats_site() + "#" + scatsVolume.getQt_interval_count();
+          return new Tuple2<>(key, scatsVolume);
+        }).reduceByKey((scv1, scv2) -> {
+          scv1.setNb_detector("all");
+          Integer sum = scv1.getVolume() + scv2.getVolume();
+          scv1.setVolume(sum);
+          return scv1;
+        }).mapToPair(pair -> {
+          ScatsVolume scv = pair._2;
+          String timeOfDay = DateStrUtils.getAusTimeOfDay(scv.getQt_interval_count());
+          String key = Joiner.on("#").join(scv.getNb_scats_site(), scv.getDay_of_week(), timeOfDay);
+          return new Tuple2<>(key, scv);
+        });
 //    pairRdd.persist(StorageLevel.MEMORY_AND_DISK());
 
       // Load SCATS baseline data.
-      Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
+      Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)"); //todo remove it
       Query query2 = new Query(ScatsDOWFeatureFactory.FT_NAME, filter2);
-      JavaPairRDD<String, Double> pairRdd2 = jsp
+      JavaPairRDD<String, Double[]> pairRdd2 = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query2)
-        .repartition(12)
+//        .repartition(12)
         .mapToPair(sf -> {
-        String scats_site = (String) sf.getAttribute(ScatsDOWFeatureFactory.NB_SCATS_SITE);
-        String day_of_week = (String) sf.getAttribute(ScatsDOWFeatureFactory.DAY_OF_WEEK);
-        Date timeOfDay_date = (Date) sf.getAttribute(ScatsDOWFeatureFactory.TIME_OF_DAY);
-        String timeOfDay = DateStrUtils.getAusTimeOfDay(timeOfDay_date);
-        String key = Joiner.on("#").join(scats_site, day_of_week, timeOfDay);
-        Double avg_vol = (Double) sf.getAttribute(ScatsDOWFeatureFactory.AVERAGE_VEHICLE_COUNT);
-        return new Tuple2<>(key, avg_vol);
-      });
+          String scats_site = (String) sf.getAttribute(ScatsDOWFeatureFactory.NB_SCATS_SITE);
+          String day_of_week = (String) sf.getAttribute(ScatsDOWFeatureFactory.DAY_OF_WEEK);
+          Date timeOfDay_date = (Date) sf.getAttribute(ScatsDOWFeatureFactory.TIME_OF_DAY);
+          String timeOfDay = DateStrUtils.getAusTimeOfDay(timeOfDay_date);
+          String key = Joiner.on("#").join(scats_site, day_of_week, timeOfDay);
+          Double avg_vol = (Double) sf.getAttribute(ScatsDOWFeatureFactory.AVERAGE_VEHICLE_COUNT);
+          Double st_devi = (Double) sf.getAttribute(ScatsDOWFeatureFactory.STANDARD_DEVIATION);
+          Double num_of_features = ((Integer) sf.getAttribute(ScatsDOWFeatureFactory.NUM_OF_FEATURES)).doubleValue();
+          Double[] r = new Double[3];
+          r[0] = avg_vol;
+          r[1] = st_devi;
+          r[2] = num_of_features;
+          return new Tuple2<>(key, r);
+        }).filter(pair -> {
+          Double avg_vol = pair._2[0];
+          Double num_of_features = pair._2[2];
+          return avg_vol > 0 && num_of_features >= 10;
+        });
 //    pairRdd2.persist(StorageLevel.MEMORY_AND_DISK());
 
       // Compare target scats to baseline vie join operation
-      JavaPairRDD<String, Tuple2<ScatsVolume, Double>> joinedRdd = pairRdd.join(pairRdd2)
-        .filter(pair -> {                 // Filter out abnormal s=scats record
-          ScatsVolume scv = pair._2._1;
-//        Integer vol = scv.getVolume();
-        Double avg_vol = pair._2._2;
-        return avg_vol > 0;// && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
-      }).repartition(200);
+      JavaPairRDD<String, Tuple2<ScatsVolume, Double[]>> joinedRdd = pairRdd.join(pairRdd2).repartition(100);
 
-//    filteredRDD.persist(StorageLevel.MEMORY_AND_DISK());
-//    pairRdd.unpersist();
-//    pairRdd2.unpersist();
 
       JavaPairRDD<String, ScatsAbnEntity> resultRdd = joinedRdd.mapToPair(pair -> {
         String key = pair._1;
+        String keys[] = key.split("#");
         ScatsVolume scv = pair._2._1;
         Integer vol = scv.getVolume();
-        Double avg_vol = pair._2._2;
+        Double avg_vol = pair._2._2[0];
+        Double st_devi = pair._2._2[1];
+
         Date date = scv.getQt_interval_count();
-        int timeDiffSec = 7200; //849  3600
+        int timeDiffSec = 1800; //849  3600
         int distDiffMet = 1000;  //142
         Date date_start = DateUtils.addSeconds(date, -timeDiffSec);
         Date date_end = DateUtils.addSeconds(date, timeDiffSec);
-
         String wktPoint = scv.getGeoPointString();
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         String timePeriod = df.format(date_start) + "/" + df.format(date_end);
@@ -194,43 +199,31 @@ public class ScatsAbnDetector implements Serializable {
         }
         GeoMesaOptions options1 = options.copy();
         options1.setTableName("tweets");
-
-//        ArrayList<SimpleFeature> features = GeoMesaDataUtils.getFeatures(options1, query3);
         int numOfTweets = GeoMesaDataUtils.getNumOfFeatures(options1, query3);
         int hasCore = 0;
-//        for (SimpleFeature sf : features) {
-//          if (sf.getAttribute(TweetsFeatureFactory.CLUSTER_ID) != null)
-//            hasCore = 1;
-//        }
 
-        Long secOfDay_start = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_start);
-        Long secOfDay_end = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_end);
+//        Long secOfDay_start = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_start);
+//        Long secOfDay_end = getSecOfDay(TimeZone.getTimeZone("Australia/Melbourne"), date_end);
+//        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end; // + " AND on_street=true";
+//        if (secOfDay_start > secOfDay_end)
+//          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end; // + " AND on_street=true";
+//        Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr_baseline));
+//        int not = GeoMesaDataUtils.getNumOfFeatures(options1, query_baseline);
+//        double tweet_baseline = not / 200d; //200 days of tweets stored in GeoMesa
 
-//      System.out.println("Start: " + date_start + "  " + date_start.getTime());
-//      System.out.println("End: " + date_end + "  " + date_end.getTime());
-//      System.out.println("secOfDay_start: " + secOfDay_start);
-//      System.out.println("secOfDay_end: " + secOfDay_end);
-
-        String queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day > " + secOfDay_start + " AND sec_of_day < " + secOfDay_end; // + " AND on_street=true";
-        if (secOfDay_start > secOfDay_end)
-          queryStr_baseline = "DWITHIN(geometry, " + wktPoint + ", " + distDiffMet + ", meters) AND sec_of_day < " + secOfDay_start + " AND sec_of_day > " + secOfDay_end; // + " AND on_street=true";
-//      else
-//        System.out.println("secOfDay_start < secOfDay_end");
-        Query query_baseline = new Query(TweetsFeatureFactory.FT_NAME_OS, CQL.toFilter(queryStr_baseline));
-        int not = GeoMesaDataUtils.getNumOfFeatures(options1, query_baseline);
-        double tweet_baseline = not / 200d; //200 days of tweets stored in GeoMesa
-//      System.out.println(queryStr_baseline);
-//      if (tweet_baseline>0)
-//        System.out.println(tweet_baseline);
-//        System.out.println(queryStr_baseline + " | " + not + " | " + tweet_baseline);
-//        System.out.println(numOfTweets);
-
-//        double[] result = {(double) vol, avg_vol, (double) numOfTweets, (double) hasCore, tweet_baseline};
+        String queryStr_baseline = ScatsNearByFeatureFactory.NB_SCATS_SITE + "=" + keys[0] + " AND " +
+          ScatsNearByFeatureFactory.DAY_OF_WEEK + "=" + keys[1] + " AND " +
+          ScatsNearByFeatureFactory.TIME_OF_DAY + "=" + new Integer(keys[2].split(":")[0]);
+        System.out.println(queryStr_baseline);
+        Query query_baseline = new Query(ScatsNearByFeatureFactory.FT_NAME, CQL.toFilter(queryStr_baseline));
+        SimpleFeature tweets_baseline = GeoMesaDataUtils.getFeatures(options, query_baseline).get(0);
+        Double tweets_avg = (Double) tweets_baseline.getAttribute(ScatsNearByFeatureFactory.AVERAGE);
+        Double tweets_st_devi = (Double) tweets_baseline.getAttribute(ScatsNearByFeatureFactory.STANDARD_DEVIATION);
 
         ScatsAbnEntity entity = new ScatsAbnEntity(false, false);
-        if (avg_vol > 0 && ((vol > 10 * avg_vol) || (vol < avg_vol / 10)))
+        if (avg_vol > 0 && ((vol > avg_vol + st_devi) || (vol < avg_vol - st_devi)))
           entity.setScatsAbn(true);
-        if (numOfTweets > 2 * tweet_baseline)
+        if (numOfTweets > tweets_avg + 2 * tweets_st_devi || numOfTweets < tweets_avg - 2 * tweets_st_devi)
           entity.setTweetsAbn(true);
         if (hasCore == 1)
           entity.setTweetCluster(true);

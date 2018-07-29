@@ -12,6 +12,7 @@ import org.geotools.data.Query;
 import org.geotools.filter.text.cql2.CQL;
 import org.geotools.filter.text.cql2.CQLException;
 import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.Option;
 import org.locationtech.geomesa.spark.GeoMesaSparkKryoRegistrator;
 import org.locationtech.geomesa.spark.SpatialRDDProvider;
 import org.locationtech.geomesa.spark.api.java.JavaSpatialRDDProvider;
@@ -47,6 +48,9 @@ public class TweetsAbnDetector {
   private static Logger logger = LoggerFactory.getLogger(TweetsAbnDetector.class);
   private SparkConf sparkConf;
 
+  @Option(name = "--distanceRange", required = false, usage = "range in searching nearby Scats Entities")
+  public int distanceRange = 500;
+
   public TweetsAbnDetector() {
     this(new SparkConf());
   }
@@ -55,7 +59,7 @@ public class TweetsAbnDetector {
     sparkConf.setAppName(this.getClass().getSimpleName());
     sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
     sparkConf.set("spark.kryo.registrator", GeoMesaSparkKryoRegistrator.class.getName());
-    Class[] classes = new Class[]{ScatsVolume.class, Tweet.class, TweetCoordinates.class, ArrayList.class};
+    Class[] classes = new Class[]{ScatsVolume.class, Tweet.class, TweetCoordinates.class, ArrayList.class, AbnCounter.class};
     sparkConf.registerKryoClasses(classes);
     this.sparkConf = sparkConf;
   }
@@ -64,6 +68,7 @@ public class TweetsAbnDetector {
     throws IllegalAccessException, CmdLineException, NoSuchFieldException {
     GeoMesaOptions options = new GeoMesaOptions();
     options.parse(args);
+
 
     TweetsAbnDetector tweetsAbnDetector = new TweetsAbnDetector();
     JobTimer.print(() -> {
@@ -115,26 +120,16 @@ public class TweetsAbnDetector {
         dateAry1[0] = dateAry1[0] < dateAry2[0] ? dateAry1[0] : dateAry2[0];
         dateAry1[1] = dateAry1[1] > dateAry2[1] ? dateAry1[1] : dateAry2[1];
         return new Tuple2<>(geoAry1, dateAry1);
-      })
+      }).mapToPair(pair -> {
+        double[] geoAry = pair._2._1;
+        long[] dateAry = pair._2._2;
 
-        //start fixme
-        .filter(pair -> {
-          double[] geoAry = pair._2._1;
-          double counter = geoAry[2];
-          return counter > 0;
-        })
-        //end fixme
-
-        .mapToPair(pair -> {
-          double[] geoAry = pair._2._1;
-          long[] dateAry = pair._2._2;
-
-          double avg_lon = geoAry[0] / geoAry[2];
-          double avg_lat = geoAry[1] / geoAry[2];
-          long min_date = dateAry[0];
-          long max_date = dateAry[1];
-          return new Tuple2<>(pair._1, new Tuple2<>(new double[]{avg_lon, avg_lat}, new long[]{min_date, max_date}));
-        });
+        double avg_lon = geoAry[0] / geoAry[2];
+        double avg_lat = geoAry[1] / geoAry[2];
+        long min_date = dateAry[0];
+        long max_date = dateAry[1];
+        return new Tuple2<>(pair._1, new Tuple2<>(new double[]{avg_lon, avg_lat}, new long[]{min_date, max_date}));
+      });
 
       JavaPairRDD<String, Tuple2<ScatsVolume, String>> key_scv_cid_rdd = cid_bbx_pair.mapToPair(pair -> {
         String clusterId = pair._1;
@@ -144,8 +139,8 @@ public class TweetsAbnDetector {
         String periodStr = df.format(new Date(dateAry[0] - 1000)) + "/" + df.format(new Date(dateAry[1] + 1000));
 
         String point_wkt = "POINT (" + geoAry[0] + " " + geoAry[1] + ")";
-        int distDiffMet = 1500;
-        Filter filter1 = CQL.toFilter("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
+
+        Filter filter1 = CQL.toFilter("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + this.distanceRange + ", meters)");
 //        System.out.println("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
         Query query1 = new Query(ScatsFeaturePointFactory.FT_NAME, filter1);
         GeoMesaOptions options1 = options.copy();
@@ -177,11 +172,11 @@ public class TweetsAbnDetector {
         return new Tuple2<>(key, new Tuple2<>(scv, clusterId));
       });
 
-//      Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)");
+      Filter filter2 = CQL.toFilter("num_of_features > 10 and average_vehicle_count>0");
       GeoMesaOptions options_scats = options.copy();
       options_scats.setTableName("scats_2017");
-      Query query2 = new Query(ScatsDOWFeatureFactory.FT_NAME);
-      JavaPairRDD<String, Double> key_avgVol_pair = jsp
+      Query query2 = new Query("ScatsDayOfWeekBySite", filter2);
+      JavaPairRDD<String, Double[]> key_avgVol_pair = jsp
         .rdd(new Configuration(), sc, options_scats.getAccumuloOptions(), query2)
         .mapToPair(sf -> {
           String day_of_week = (String) sf.getAttribute(ScatsDOWFeatureFactory.DAY_OF_WEEK);
@@ -190,52 +185,44 @@ public class TweetsAbnDetector {
           String timeOfDay = DateStrUtils.getAusTimeOfDay(timeOfDay_date);
           String key = Joiner.on("#").join(scats_site, day_of_week, timeOfDay);
           Double avg_vol = (Double) sf.getAttribute(ScatsDOWFeatureFactory.AVERAGE_VEHICLE_COUNT);
-          return new Tuple2<>(key, avg_vol);
+          Double st_devi = (Double) sf.getAttribute(ScatsDOWFeatureFactory.STANDARD_DEVIATION);
+          Double[] r = new Double[]{avg_vol, st_devi};
+          return new Tuple2<>(key, r);
         });
 
-      JavaPairRDD<String, Tuple2<Tuple2<ScatsVolume, String>, Double>> joinedRdd = key_scv_cid_rdd.join(key_avgVol_pair)
-        .filter(pair -> {                 // Filter out abnormal s=scats record
-          Double avg_vol = pair._2._2;
-          return avg_vol > 0;// && (vol > 10 * avg_vol);   //|| vol < avg_vol / 10
-        });
       // Merge area volumes before comparison
-      JavaPairRDD<String, Tuple2<Integer, Double>> areaRdd = joinedRdd.mapToPair(pair->{
+      JavaPairRDD<String, AbnCounter> areaRdd = key_scv_cid_rdd.join(key_avgVol_pair).mapToPair(pair -> {
         ScatsVolume scv = pair._2._1._1;
         Integer vol = scv.getVolume();
         String clusterId = pair._2._1._2;
-        Double avg_vol = pair._2._2;
-        return new Tuple2<>(clusterId, new Tuple2<>(vol, avg_vol));
-      }).reduceByKey((t1, t2)->{
-        Integer vol_sum = t1._1 + t2._1;
-        Double avg_sum = t1._2 + t2._2;
-        return new Tuple2<>(vol_sum, avg_sum);
-      });
-      // End merge
-      JavaPairRDD<String, Boolean> cid_abn_pair = areaRdd.mapToPair(pair -> {
+        Double avg_vol = pair._2._2[0];
+        Double st_devi = pair._2._2[1];
         Boolean abn = false;
-        String clusterId = pair._1;
-        Integer vol_sum = pair._2._1;
-        Double avg_sum = pair._2._2;
-        if (vol_sum > avg_sum)
+
+        if (vol > (avg_vol + 3 * st_devi) || (vol < avg_vol - 3 * st_devi)) {
+          System.out.println("avg: " + avg_vol + " st_devi: " + st_devi + " vol: " + vol);
           abn = true;
-
-        return new Tuple2<>(clusterId, abn);
-      });
-
-      JavaPairRDD<String, int[]> cid_tf_pair = cid_abn_pair.aggregateByKey(new int[]{0, 0}, (ary, abn) -> {
-        if (abn)
-          ary[0] = ary[0] + 1;
+        }
+        return new Tuple2<>(clusterId, new Tuple2<>(scv, abn));
+      }).aggregateByKey(new AbnCounter(), (counter, tuple) -> {
+        Boolean isAbn = tuple._2;
+        if (isAbn)
+          counter.addAbnScv(tuple._1);
         else
-          ary[1] = ary[1] + 1;
-        return ary;
-      }, (ary1, ary2) -> {
-        ary1[0] = ary1[0] + ary2[0];
-        ary1[1] = ary1[1] + ary2[1];
-        return ary1;
+          counter.addNormScv(tuple._1);
+        return counter;
+      }, AbnCounter::merge);
+
+
+      JavaPairRDD<String, int[]> cid_resultRdd = areaRdd.mapToPair(tuple -> {
+        String cid = tuple._1;
+        Integer numOfAbn = tuple._2.getAbnList().size();
+        Integer numOfNorm = tuple._2.getNormList().size();
+        return new Tuple2<>(cid, new int[]{numOfAbn, numOfNorm});
       });
 
       System.out.println("ClusterID : num of abn SCATS entities : num of normal SCATS entities : isAbn?");
-      List<Tuple2<String, int[]>> resultList = cid_tf_pair.collect();
+      List<Tuple2<String, int[]>> resultList = cid_resultRdd.collect();
       int total = 0;
       int tt = 0;
       int tf = 0;

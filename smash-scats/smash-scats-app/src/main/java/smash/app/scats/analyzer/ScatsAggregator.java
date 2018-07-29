@@ -211,7 +211,9 @@ public class ScatsAggregator implements Serializable {
 
     JavaPairRDD<String, long[]> scats_volume_bySite = scatsFeatureRDD.mapToPair(sf -> {
       ScatsVolume scatsVolume = ScatsFeaturePointFactory.fromSFtoPojo(sf);
-      String key = scatsVolume.getNb_scats_site() + "#" + scatsVolume.getQt_interval_count();
+      SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH");   //todo
+      df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+      String key = scatsVolume.getNb_scats_site() + "#" + df.format(scatsVolume.getQt_interval_count());
       return new Tuple2<>(key, scatsVolume);
     }).reduceByKey((scv1, scv2) -> {
       scv1.setNb_detector("all");
@@ -225,7 +227,7 @@ public class ScatsAggregator implements Serializable {
       Integer volume = scv.getVolume();
       String dayOfWeek = scv.getDay_of_week();
       Date date = scv.getQt_interval_count();
-      SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+      SimpleDateFormat df = new SimpleDateFormat(ScatsDOWFeatureFactory.timeOfDay_exp);  //HH:mm:ss
       df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
       String timeOfDay = df.format(date);
       String geo_wkt = scv.getGeoPointString();
