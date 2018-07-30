@@ -33,6 +33,7 @@ import smash.utils.geomesa.GeoMesaDataUtils;
 import smash.utils.geomesa.GeoMesaOptions;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -44,7 +45,7 @@ import java.util.Map;
  * @author Yikai Gong
  */
 
-public class TweetsAbnDetector {
+public class TweetsAbnDetector implements Serializable {
   private static Logger logger = LoggerFactory.getLogger(TweetsAbnDetector.class);
   private SparkConf sparkConf;
 
@@ -139,8 +140,8 @@ public class TweetsAbnDetector {
         String periodStr = df.format(new Date(dateAry[0] - 1000)) + "/" + df.format(new Date(dateAry[1] + 1000));
 
         String point_wkt = "POINT (" + geoAry[0] + " " + geoAry[1] + ")";
-
-        Filter filter1 = CQL.toFilter("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + this.distanceRange + ", meters)");
+        String queryStr_1 = "qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + this.distanceRange + ", meters)";
+        Filter filter1 = CQL.toFilter(queryStr_1);
 //        System.out.println("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
         Query query1 = new Query(ScatsFeaturePointFactory.FT_NAME, filter1);
         GeoMesaOptions options1 = options.copy();
@@ -199,7 +200,7 @@ public class TweetsAbnDetector {
         Double st_devi = pair._2._2[1];
         Boolean abn = false;
 
-        if (vol > (avg_vol + 3 * st_devi) || (vol < avg_vol - 3 * st_devi)) {
+        if (vol > (avg_vol + 2 * st_devi) || (vol < avg_vol - 2 * st_devi)) {
           System.out.println("avg: " + avg_vol + " st_devi: " + st_devi + " vol: " + vol);
           abn = true;
         }

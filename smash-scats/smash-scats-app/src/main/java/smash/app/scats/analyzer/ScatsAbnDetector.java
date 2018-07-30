@@ -143,7 +143,7 @@ public class ScatsAbnDetector implements Serializable {
 
       // Load SCATS baseline data.
       Filter filter2 = CQL.toFilter("BBOX(geometry, 144.895795,-37.86113,145.014087,-37.763636)"); //todo remove it
-      Query query2 = new Query(ScatsDOWFeatureFactory.FT_NAME, filter2);
+      Query query2 = new Query("ScatsDayOfWeekBySite", filter2);
       JavaPairRDD<String, Double[]> pairRdd2 = jsp
         .rdd(new Configuration(), sc, options.getAccumuloOptions(), query2)
 //        .repartition(12)
@@ -211,17 +211,20 @@ public class ScatsAbnDetector implements Serializable {
 //        int not = GeoMesaDataUtils.getNumOfFeatures(options1, query_baseline);
 //        double tweet_baseline = not / 200d; //200 days of tweets stored in GeoMesa
 
-        String queryStr_baseline = ScatsNearByFeatureFactory.NB_SCATS_SITE + "=" + keys[0] + " AND " +
-          ScatsNearByFeatureFactory.DAY_OF_WEEK + "=" + keys[1] + " AND " +
-          ScatsNearByFeatureFactory.TIME_OF_DAY + "=" + new Integer(keys[2].split(":")[0]);
-        System.out.println(queryStr_baseline);
+        String queryStr_baseline = ScatsNearByFeatureFactory.NB_SCATS_SITE + "='" + keys[0] + "' AND " +
+          ScatsNearByFeatureFactory.DAY_OF_WEEK + "='" + keys[1] + "' AND " +
+          ScatsNearByFeatureFactory.TIME_OF_DAY + "='" + new Integer(keys[2].split(":")[0]) + "'";
+//        System.out.println(queryStr_baseline);
         Query query_baseline = new Query(ScatsNearByFeatureFactory.FT_NAME, CQL.toFilter(queryStr_baseline));
-        SimpleFeature tweets_baseline = GeoMesaDataUtils.getFeatures(options, query_baseline).get(0);
+        ArrayList<SimpleFeature> features = GeoMesaDataUtils.getFeatures(options, query_baseline);
+        if (features.size() < 1)
+          return null;
+        SimpleFeature tweets_baseline = features.get(0);
         Double tweets_avg = (Double) tweets_baseline.getAttribute(ScatsNearByFeatureFactory.AVERAGE);
         Double tweets_st_devi = (Double) tweets_baseline.getAttribute(ScatsNearByFeatureFactory.STANDARD_DEVIATION);
 
         ScatsAbnEntity entity = new ScatsAbnEntity(false, false);
-        if (avg_vol > 0 && ((vol > avg_vol + st_devi) || (vol < avg_vol - st_devi)))
+        if (avg_vol > 0 && ((vol > avg_vol + 2 * st_devi) || (vol < avg_vol - 2 * st_devi)))
           entity.setScatsAbn(true);
         if (numOfTweets > tweets_avg + 2 * tweets_st_devi || numOfTweets < tweets_avg - 2 * tweets_st_devi)
           entity.setTweetsAbn(true);
@@ -239,6 +242,8 @@ public class ScatsAbnDetector implements Serializable {
 //    resultRdd.persist(StorageLevel.MEMORY_AND_DISK());
       // TT TF FT FF  (SCATS-abn/TWEET-abn) + tweets!=0
       TF = resultRdd.aggregate(new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0}, (r, tuple) -> {
+        if (tuple == null)
+          return r;
         ScatsAbnEntity e = tuple._2;
         if (e.getScatsAbn() && e.getTweetsAbn())
           r[0] = r[0] + 1;
