@@ -36,10 +36,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author Yikai Gong
@@ -147,7 +144,7 @@ public class TweetsAbnDetector implements Serializable {
         GeoMesaOptions options1 = options.copy();
         options1.setTableName("scats_2017");
         ArrayList<SimpleFeature> sfList = GeoMesaDataUtils.getFeatures(options1, query1);
-        return new Tuple2<>(clusterId, sfList);
+        return new Tuple2<>(clusterId+"#"+queryStr_1, sfList); //fixme
       }).flatMapToPair(pair -> {
         ArrayList<Tuple2<String, Tuple2<ScatsVolume, String>>> rList = new ArrayList<>();
         String clusterId = pair._1;
@@ -173,7 +170,7 @@ public class TweetsAbnDetector implements Serializable {
         return new Tuple2<>(key, new Tuple2<>(scv, clusterId));
       });
 
-      Filter filter2 = CQL.toFilter("num_of_features > 10 and average_vehicle_count>0");
+      Filter filter2 = CQL.toFilter("num_of_features > 30 and average_vehicle_count>0");
       GeoMesaOptions options_scats = options.copy();
       options_scats.setTableName("scats_2017");
       Query query2 = new Query("ScatsDayOfWeekBySite", filter2);
@@ -201,7 +198,12 @@ public class TweetsAbnDetector implements Serializable {
         Boolean abn = false;
 
         if (vol > (avg_vol + 2 * st_devi) || (vol < avg_vol - 2 * st_devi)) {
-          System.out.println("avg: " + avg_vol + " st_devi: " + st_devi + " vol: " + vol);
+          if(clusterId.split("#")[0].equals("942afc93-0fab-4e92-abd0-6ceed6510ea3")){
+            DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
+            df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
+            System.out.println("site: " +scv.getNb_scats_site() + ", timestamp: " + df.format(scv.getQt_interval_count()) + ", dayOfWeek: " + scv.getDay_of_week()
+              + ", avg: " + avg_vol + ", st_devi: " + st_devi + ", vol: " + vol);
+          }
           abn = true;
         }
         return new Tuple2<>(clusterId, new Tuple2<>(scv, abn));
@@ -236,7 +238,8 @@ public class TweetsAbnDetector implements Serializable {
         } else {
           tf++;
         }
-        System.out.println(tuple._1 + " : " + tuple._2[0] + " : " + tuple._2[1] + " : " + abn);
+        System.out.println(tuple._1.split("#")[0] + " : " + tuple._2[0] + " : " + tuple._2[1] + " : " + abn +"\n" + tuple._1.split("#")[1]);
+
         total++;
       }
       System.out.println("Total Clusters: " + total);
