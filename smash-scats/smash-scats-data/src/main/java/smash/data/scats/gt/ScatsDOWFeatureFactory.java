@@ -26,7 +26,7 @@ import java.util.*;
 
 public class ScatsDOWFeatureFactory {
 
-  public static final String FT_NAME = "ScatsDayOfWeekBySite2";
+  public static final String FT_NAME = "ScatsDayOfWeekBySite";  //todo ScatsDayOfWeekBySite2 - hourly ScatsDayOfWeekBySite3 - any day_of_week per 15 minutes
 
   public static final String NB_SCATS_SITE = "nb_scats_site";
   public static final String NB_DETECTOR = "nb_detector";
@@ -38,7 +38,7 @@ public class ScatsDOWFeatureFactory {
   public static final String MINIMUM_VOLUME = "min_vol";
   public static final String MAXIMUM_VOLUME = "max_vol";
 
-  public static final String timeOfDay_exp = "HH";  //HH:mm:ss
+  public static final String timeOfDay_exp = "HH:mm:ss";  //todo HH:mm:ss   HH
 
   public static SimpleFeatureType createFeatureType() {
     List<String> attributes = new ArrayList<>();

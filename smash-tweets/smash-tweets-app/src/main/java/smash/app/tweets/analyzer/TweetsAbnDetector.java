@@ -47,7 +47,7 @@ public class TweetsAbnDetector implements Serializable {
   private SparkConf sparkConf;
 
   @Option(name = "--distanceRange", required = false, usage = "range in searching nearby Scats Entities")
-  public int distanceRange = 500;
+  public int distanceRange = 1000;
 
   public TweetsAbnDetector() {
     this(new SparkConf());
@@ -94,7 +94,7 @@ public class TweetsAbnDetector implements Serializable {
         }))
         .filter(pair -> !Strings.isNullOrEmpty(pair._1));
 
-      JavaPairRDD<String, Tuple2<double[], long[]>> cid_bbx_pair = cid_t_pairRdd.aggregateByKey(new Tuple2<double[], long[]>(new double[]{0, 0, 0}, new long[]{-1, -1}), (tup, sf) -> {
+      JavaPairRDD<String, Tuple2<double[], long[]>> cid_bbx_pair = cid_t_pairRdd.aggregateByKey(new Tuple2<double[], long[]>(new double[]{0, 0, 0, 0, 0, 0, 0}, new long[]{-1, -1}), (tup, sf) -> {
         Point point = (Point) sf.getDefaultGeometry();
         Date date = (Date) sf.getAttribute(TweetsFeatureFactory.CREATED_AT);
         double[] geoAry = tup._1;
@@ -102,6 +102,12 @@ public class TweetsAbnDetector implements Serializable {
         geoAry[0] = geoAry[0] + point.getX();
         geoAry[1] = geoAry[1] + point.getY();
         geoAry[2] = geoAry[2] + 1;
+        // min x, max x, min y, max y
+        geoAry[3] = geoAry[3] == 0d || point.getX() < geoAry[3] ? point.getX() : geoAry[3];
+        geoAry[4] = geoAry[4] == 0d || point.getX() > geoAry[4] ? point.getX() : geoAry[4];
+        geoAry[5] = geoAry[5] == 0d || point.getY() > geoAry[5] ? point.getX() : geoAry[5];
+        geoAry[6] = geoAry[6] == 0d || point.getY() > geoAry[6] ? point.getX() : geoAry[6];
+
 
         dateAry[0] = dateAry[0] < 0 || date.getTime() < dateAry[0] ? date.getTime() : dateAry[0];
         dateAry[1] = dateAry[1] < 0 || date.getTime() > dateAry[1] ? date.getTime() : dateAry[1];
@@ -114,6 +120,11 @@ public class TweetsAbnDetector implements Serializable {
         geoAry1[0] = geoAry1[0] + geoAry2[0];
         geoAry1[1] = geoAry1[1] + geoAry2[1];
         geoAry1[2] = geoAry1[2] + geoAry2[2];
+        // min x, max x, min y, max y
+        geoAry1[3] = geoAry2[3] < geoAry1[3] ? geoAry2[3] : geoAry1[3];
+        geoAry1[4] = geoAry2[4] > geoAry1[4] ? geoAry2[4] : geoAry1[4];
+        geoAry1[5] = geoAry2[5] < geoAry1[5] ? geoAry2[5] : geoAry1[5];
+        geoAry1[6] = geoAry2[6] > geoAry1[6] ? geoAry2[6] : geoAry1[6];
 
         dateAry1[0] = dateAry1[0] < dateAry2[0] ? dateAry1[0] : dateAry2[0];
         dateAry1[1] = dateAry1[1] > dateAry2[1] ? dateAry1[1] : dateAry2[1];
@@ -126,7 +137,8 @@ public class TweetsAbnDetector implements Serializable {
         double avg_lat = geoAry[1] / geoAry[2];
         long min_date = dateAry[0];
         long max_date = dateAry[1];
-        return new Tuple2<>(pair._1, new Tuple2<>(new double[]{avg_lon, avg_lat}, new long[]{min_date, max_date}));
+        double radius = getDistanceBetweenCoordiInKM(geoAry[3], geoAry[4], geoAry[5], geoAry[6]) / 2;
+        return new Tuple2<>(pair._1, new Tuple2<>(new double[]{avg_lon, avg_lat, geoAry[2], radius}, new long[]{min_date, max_date}));
       });
 
       JavaPairRDD<String, Tuple2<ScatsVolume, String>> key_scv_cid_rdd = cid_bbx_pair.mapToPair(pair -> {
@@ -137,14 +149,15 @@ public class TweetsAbnDetector implements Serializable {
         String periodStr = df.format(new Date(dateAry[0] - 1000)) + "/" + df.format(new Date(dateAry[1] + 1000));
 
         String point_wkt = "POINT (" + geoAry[0] + " " + geoAry[1] + ")";
-        String queryStr_1 = "qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + this.distanceRange + ", meters)";
+        double distance = geoAry[3] + 300;
+        String queryStr_1 = "qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distance + ", meters)";
         Filter filter1 = CQL.toFilter(queryStr_1);
 //        System.out.println("qt_interval_count during " + periodStr + " AND  DWITHIN(geometry, " + point_wkt + ", " + distDiffMet + ", meters)");
         Query query1 = new Query(ScatsFeaturePointFactory.FT_NAME, filter1);
         GeoMesaOptions options1 = options.copy();
         options1.setTableName("scats_2017");
         ArrayList<SimpleFeature> sfList = GeoMesaDataUtils.getFeatures(options1, query1);
-        return new Tuple2<>(clusterId+"#"+queryStr_1, sfList); //fixme
+        return new Tuple2<>(clusterId + "#" + queryStr_1 + "#" + geoAry[2], sfList); //fixme
       }).flatMapToPair(pair -> {
         ArrayList<Tuple2<String, Tuple2<ScatsVolume, String>>> rList = new ArrayList<>();
         String clusterId = pair._1;
@@ -198,10 +211,10 @@ public class TweetsAbnDetector implements Serializable {
         Boolean abn = false;
 
         if (vol > (avg_vol + 2 * st_devi) || (vol < avg_vol - 2 * st_devi)) {
-          if(clusterId.split("#")[0].equals("942afc93-0fab-4e92-abd0-6ceed6510ea3")){
+          if (clusterId.split("#")[0].equals("942afc93-0fab-4e92-abd0-6ceed6510ea3")) {
             DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
             df.setTimeZone(TimeZone.getTimeZone("Australia/Melbourne"));
-            System.out.println("site: " +scv.getNb_scats_site() + ", timestamp: " + df.format(scv.getQt_interval_count()) + ", dayOfWeek: " + scv.getDay_of_week()
+            System.out.println("site: " + scv.getNb_scats_site() + ", timestamp: " + df.format(scv.getQt_interval_count()) + ", dayOfWeek: " + scv.getDay_of_week()
               + ", avg: " + avg_vol + ", st_devi: " + st_devi + ", vol: " + vol);
           }
           abn = true;
@@ -231,6 +244,8 @@ public class TweetsAbnDetector implements Serializable {
       int tf = 0;
 
       for (Tuple2<String, int[]> tuple : resultList) {
+        if (Double.valueOf(tuple._1.split("#")[2]) <0)
+          continue;
         boolean abn = false;
         if (tuple._2[0] > 0) {
           abn = true;
@@ -238,7 +253,7 @@ public class TweetsAbnDetector implements Serializable {
         } else {
           tf++;
         }
-        System.out.println(tuple._1.split("#")[0] + " : " + tuple._2[0] + " : " + tuple._2[1] + " : " + abn +"\n" + tuple._1.split("#")[1]);
+        System.out.println(tuple._1.split("#")[0] + " : " + tuple._2[0] + " : " + tuple._2[1] + " : " + abn + "\n" + tuple._1.split("#")[1]);
 
         total++;
       }
@@ -294,4 +309,14 @@ public class TweetsAbnDetector implements Serializable {
 //      });
     }
   }
+
+  public static double getDistanceBetweenCoordiInKM(double minX, double maxX, double minY, double maxY) {
+    double kms_per_radian_mel = 87.944d;
+    double dis_x = (maxX - minX) * kms_per_radian_mel * 1000;
+    double dis_y = (maxY - minY) * kms_per_radian_mel * 1000;
+    double dis = Math.sqrt(Math.pow(dis_x, 2) + Math.pow(dis_y, 2));
+//    System.out.println(minX + ", " + maxX + ", " + minY + ", " + maxY + ", " + dis);
+    return dis;
+  }
+
 }
